@@ -2,6 +2,7 @@
 Automated Human-Risk Intelligence & SOAR Response Engine
 
 📖 Overview
+
 ECOSHIELD is a cybersecurity framework designed to bridge the gap between human error and automated defense. Developed as part of the EcoTechLabs simulation suite, it simulates department-specific phishing threats (Finance, Health, Tech) and utilizes an autonomous "Sentinel" to execute lockdown protocols when risk thresholds are exceeded.
 
 🚀 Core Components
