@@ -1,36 +1,35 @@
-🛡️ ECOSHIELD AGENT v1.0
-Automated Human-Risk Intelligence & SOAR Response Engine
+ 🛡️ ECOSHIELD AGENT v2.0
+Autonomous Human-Risk Intelligence & SOAR Response Engine
 
-📖 Overview
+> 2026 Update: Transitioning from static simulation to Agentic Defense. ECOSHIELD now autonomously analyzes intent and executes surgical lockdowns.
 
-ECOSHIELD is a cybersecurity framework designed to bridge the gap between human error and automated defense. Developed as part of the EcoTechLabs simulation suite, it simulates department-specific phishing threats (Finance, Health, Tech) and utilizes an autonomous "Sentinel" to execute lockdown protocols when risk thresholds are exceeded.
+ 📖 Overview
+ECOSHIELD is an agentic cybersecurity framework designed to bridge the gap between human error and automated defense. Developed as part of the EcoTechLabs suite, it utilizes an autonomous "Sentinel" to execute precision mitigation protocols when deceptive "Honey-Tokens" are triggered.
 
-🚀 Core Components
-The Vault (vault.py): The central "Source of Truth." A secure SQLite database holding employee identities and real-time risk profiles.
+ 🚀 Core Components
+- The Vault (`vault.py`): The secure SQLite "Source of Truth" for employee identities and real-time risk scoring.
+- The Trap (`trap.py`):A dynamic Flask-based simulation engine using White-Label Branding to test user responses to department-specific threats.
+- The Sentinel (`sentinel.py`): The Autonomous Agent. A background engine that monitors telemetry and executes Surgical Lockdown Protocols when critical intent is detected.
+- Visual Dashboard (`dashboard.py`): An ASCII-based Command Center for rapid risk visualization across the organization.
 
-The Trap (trap.py): The "Front Line." A dynamic Flask-based simulation engine that uses White-Label Branding to create realistic login tests.
+ 🛠️ Installation & Usage
+1. Initialize the Vault: `python vault.py`
+2. Start the Sentinel Agent: `python sentinel.py`
+3. Launch the Simulation: `python trap.py`
+4. Monitor Analytics: `python dashboard.py`
 
-The Sentinel (sentinel.py): The "Auto-Defender." A background monitoring script that executes Lockdown Protocols (SOAR) when a user reaches "Critical Risk."
+ 🔐 Advanced Security Features (v2.0)
+- Honey-Token Deception: URL parameters (e.g., `?dept=finance`) trigger instant UI branding. Accessing hidden admin paths triggers an immediate Sentinel response.
+- Surgical Lockdown: Unlike traditional firewalls, ECOSHIELD isolates only the targeted department's data, ensuring business continuity for the rest of the organization.
+- Autonomous Mitigation: Real time credential locking and session termination without human intervention.
 
-Visual Dashboard (dashboard.py): The "Command Center." An ASCII-based analytics suite for rapid risk visualization across the organization.
+ 🗺️ 2026 Project Roadmap
+ECOSHIELD is moving toward a fully self-healing security architecture:
+- [ ] LLM Log Interpretation: Integrating private AI to transform raw Sentinel logs into plain English incident reports for SOC teams.
+- [ ] Multi-Vector Defense: Expanding the "Trap" to detect credential stuffing and unauthorized API scraping.
+- [ ] Self-Destruct Logic: Advanced anti-forensics to wipe sensitive Vault data if unauthorized administrative access is detected.
 
-🛠️ Installation & Usage
-Initialize the Vault: python vault.py
-
-Start the Sentinel: python sentinel.py
-
-Launch the Simulation: python trap.py
-
-View Analytics: python dashboard.py
-
-🔐 Security Features
-Dynamic Luring: URL parameters (e.g., ?dept=finance) trigger instant UI branding changes.
-
-Autonomous Response: Real-time credential locking without human intervention.
-
-Anti-Forensics (WIP): Integrated "Self-Destruct" logic to wipe sensitive data if unauthorized admin access is detected.
-
-⚖️ License
-Proprietary / All Rights Reserved. This project is part of my professional portfolio. Unauthorized copying, modification, or distribution of this code via any medium is strictly prohibited.
+ ⚖️ License
+Proprietary / All Rights Reserved. This project is part of a professional portfolio. Unauthorized copying, modification, or distribution is strictly prohibited.
 
 Developed by @eco4x | Powered by EcoTechLabs Security
