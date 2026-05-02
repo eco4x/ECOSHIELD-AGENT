@@ -1,35 +1,92 @@
- 🛡️ ECOSHIELD AGENT v2.0
-Autonomous Human-Risk Intelligence & SOAR Response Engine
 
-> 2026 Update: Transitioning from static simulation to Agentic Defense. ECOSHIELD now autonomously analyzes intent and executes surgical lockdowns.
 
- 📖 Overview
-ECOSHIELD is an agentic cybersecurity framework designed to bridge the gap between human error and automated defense. Developed as part of the EcoTechLabs suite, it utilizes an autonomous "Sentinel" to execute precision mitigation protocols when deceptive "Honey-Tokens" are triggered.
+---
 
- 🚀 Core Components
-- The Vault (`vault.py`): The secure SQLite "Source of Truth" for employee identities and real-time risk scoring.
-- The Trap (`trap.py`):A dynamic Flask-based simulation engine using White-Label Branding to test user responses to department-specific threats.
-- The Sentinel (`sentinel.py`): The Autonomous Agent. A background engine that monitors telemetry and executes Surgical Lockdown Protocols when critical intent is detected.
-- Visual Dashboard (`dashboard.py`): An ASCII-based Command Center for rapid risk visualization across the organization.
+## 🛡️ ECOSHIELD AGENT
 
- 🛠️ Installation & Usage
-1. Initialize the Vault: `python vault.py`
-2. Start the Sentinel Agent: `python sentinel.py`
-3. Launch the Simulation: `python trap.py`
-4. Monitor Analytics: `python dashboard.py`
+**Human-Risk Simulation & SOAR Workflow Prototype**
 
- 🔐 Advanced Security Features (v2.0)
-- Honey-Token Deception: URL parameters (e.g., `?dept=finance`) trigger instant UI branding. Accessing hidden admin paths triggers an immediate Sentinel response.
-- Surgical Lockdown: Unlike traditional firewalls, ECOSHIELD isolates only the targeted department's data, ensuring business continuity for the rest of the organization.
-- Autonomous Mitigation: Real time credential locking and session termination without human intervention.
+---
 
- 🗺️ 2026 Project Roadmap
-ECOSHIELD is moving toward a fully self-healing security architecture:
-- [ ] LLM Log Interpretation: Integrating private AI to transform raw Sentinel logs into plain English incident reports for SOC teams.
-- [ ] Multi-Vector Defense: Expanding the "Trap" to detect credential stuffing and unauthorized API scraping.
-- [ ] Self-Destruct Logic: Advanced anti-forensics to wipe sensitive Vault data if unauthorized administrative access is detected.
+### 📖 Overview
 
- ⚖️ License
-Proprietary / All Rights Reserved. This project is part of a professional portfolio. Unauthorized copying, modification, or distribution is strictly prohibited.
+ECOSHIELD is a prototype cybersecurity framework designed to simulate how human-risk signals (e.g., phishing interaction, credential misuse) can trigger automated response workflows in a Security Operations (SOC) environment.
 
-Developed by @eco4x | Powered by EcoTechLabs Security
+The project focuses on bridging **user behavior analysis** with **automated mitigation logic**, demonstrating how deception-based signals can be used to drive SOAR-like responses.
+
+---
+
+### 🧠 Core Concept
+
+Instead of relying purely on system logs, ECOSHIELD explores:
+
+* Detection of risky user behavior via controlled deception (honey-tokens)
+* Mapping those signals into automated response actions
+* Isolating impact based on contextual risk (e.g., department-level)
+
+This serves as a **proof-of-concept for integrating human-risk intelligence into SOC automation pipelines**.
+
+---
+
+### ⚙️ System Components
+
+* **Vault (`vault.py`)**
+  SQLite-based store for user identity and simulated risk scoring.
+
+* **Trap (`trap.py`)**
+  Flask-based simulation layer used to trigger user interactions and emulate phishing/deception scenarios.
+
+* **Sentinel (`sentinel.py`)**
+  Rule-based automation engine that monitors events and executes predefined response actions.
+
+* **Dashboard (`dashboard.py`)**
+  Lightweight command-line interface for visualizing simulated risk states and system activity.
+
+---
+
+### 🔁 Simulated Workflow
+
+1. User interacts with a deception trigger (Trap)
+2. Event is recorded and evaluated against risk logic (Vault)
+3. Sentinel processes the event
+4. Predefined response action is triggered (e.g., simulated credential lock, session termination)
+5. Dashboard reflects updated system state
+
+---
+
+### 🧪 Purpose & Scope
+
+This project is a **controlled simulation environment**, intended to:
+
+* Demonstrate SOAR workflow logic
+* Explore human-risk-driven detection models
+* Serve as a foundation for future integration with real security tools (e.g., SIEM, IAM, EDR)
+
+---
+
+### 🔌 Future Integration Direction
+
+Planned evolution includes:
+
+* Integration with external logging systems (SIEM)
+* API-based response actions (identity/access control systems)
+* Enhanced detection logic (multi-vector threat simulation)
+* AI-assisted log interpretation for SOC analysts
+
+---
+
+### ⚠️ Disclaimer
+
+ECOSHIELD is a **prototype and research-oriented project**.
+It is not intended for production deployment in its current form.
+
+---
+
+### 👤 Author
+
+Developed by **eco4x**
+Part of EcoTechLabs Security Research
+
+
+
+Say the word.
