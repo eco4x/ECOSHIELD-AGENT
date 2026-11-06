@@ -1,26 +1,85 @@
 ﻿from flask import Flask, render_template_string, request, redirect, url_for, Response, jsonify, session
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from functools import wraps
 import sqlite3
 import os
 from io import StringIO
-from datetime import datetime
+from datetime import datetime, timedelta
 app = Flask(__name__)
-app.secret_key = os.environ.get('ECOSHIELD_SECRET_KEY', 'ecoshield-demo-key')
-
-ADMIN_TOKEN = os.environ.get('ECOSHIELD_ADMIN_TOKEN', 'AdminDemo!2026')
-CREDENTIALS = {
-  'admin': {
-    'email': 'admin@ecoshield.local',
-    'password': 'AdminDemo!2026',
-    'display_name': 'SOC Admin',
-    'department': 'Security Operations'
-  },
-  'employee': {
-    'email': 'alice.vance@ecofinance.local',
-    'password': 'Hunter22!',
-    'display_name': 'Alice Vance',
-    'department': 'Finance'
-  }
+secret_key = os.environ.get('ECOSHIELD_SECRET_KEY', '')
+required_credentials = {
+    'ECOSHIELD_ADMIN_EMAIL': os.environ.get('ECOSHIELD_ADMIN_EMAIL', '').strip().lower(),
+    'ECOSHIELD_ADMIN_PASSWORD': os.environ.get('ECOSHIELD_ADMIN_PASSWORD', ''),
+    'ECOSHIELD_EMPLOYEE_EMAIL': os.environ.get('ECOSHIELD_EMPLOYEE_EMAIL', '').strip().lower(),
+    'ECOSHIELD_EMPLOYEE_PASSWORD': os.environ.get('ECOSHIELD_EMPLOYEE_PASSWORD', ''),
 }
+missing_settings = [name for name, value in required_credentials.items() if not value]
+if not secret_key or len(secret_key) < 32:
+    missing_settings.append('ECOSHIELD_SECRET_KEY (at least 32 characters)')
+if missing_settings:
+    raise RuntimeError('Missing or invalid required security settings: ' + ', '.join(missing_settings))
+if len(required_credentials['ECOSHIELD_ADMIN_PASSWORD']) < 12 or len(required_credentials['ECOSHIELD_EMPLOYEE_PASSWORD']) < 12:
+    raise RuntimeError('Admin and employee passwords must each be at least 12 characters.')
+
+app.config.update(
+    SECRET_KEY=secret_key,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.environ.get('ECOSHIELD_COOKIE_SECURE', 'true').lower() == 'true',
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
+    SESSION_REFRESH_EACH_REQUEST=True,
+)
+csrf = CSRFProtect(app)
+limiter = Limiter(key_func=get_remote_address, app=app, default_limits=[])
+
+CREDENTIALS = {
+    'admin': {
+        'email': required_credentials['ECOSHIELD_ADMIN_EMAIL'],
+        'password': required_credentials['ECOSHIELD_ADMIN_PASSWORD'],
+        'display_name': 'SOC Admin',
+        'department': 'Security Operations'
+    },
+    'employee': {
+        'email': required_credentials['ECOSHIELD_EMPLOYEE_EMAIL'],
+        'password': required_credentials['ECOSHIELD_EMPLOYEE_PASSWORD'],
+        'display_name': 'Alice Vance',
+        'department': 'Finance'
+    }
+}
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get('user_role'):
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Authentication required'}), 401
+            return redirect(url_for('login'))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if session.get('user_role') != 'admin':
+            if request.path.startswith('/api/'):
+                status = 401 if not session.get('user_role') else 403
+                return jsonify({'error': 'Administrator access required'}), status
+            return ('Administrator access required', 401 if not session.get('user_role') else 403)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    return response
 
 SOURCE_INFOS = {
   'Alice Vance': {'ip': '10.1.24.11', 'computer': 'FIN-WKSTN-A1', 'network': 'Finance VLAN'},
