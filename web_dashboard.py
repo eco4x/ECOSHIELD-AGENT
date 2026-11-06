@@ -108,17 +108,14 @@ LOGIN_PAGE = """
 <body>
   <div class="card">
     <h1>ECOSHIELD Demo Login</h1>
-    <p>Use the dummy credentials below to open a separate admin tab and employee tab for the simulation.</p>
+    <p>Sign in with the account credentials configured by the system administrator.</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST" action="/login">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input name="email" placeholder="Email" autocomplete="username" required />
       <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
       <button type="submit">Sign in</button>
     </form>
-    <div class="hint">
-      <strong>Admin:</strong> admin@ecoshield.local / AdminDemo!2026<br />
-      <strong>Employee:</strong> alice.vance@ecofinance.local / Hunter22!
-    </div>
   </div>
 </body>
 </html>
@@ -132,6 +129,7 @@ def home():
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit('5 per minute')
 def login():
     error = None
     if request.method == 'POST':
@@ -139,24 +137,25 @@ def login():
         password = request.form.get('password', '').strip()
         for role, user in CREDENTIALS.items():
             if email == user['email'] and password == user['password']:
+                session.clear()
+                session.permanent = True
                 session['user_role'] = role
                 session['user_name'] = user['display_name']
                 session['department'] = user['department']
                 return redirect(url_for('dashboard'))
-        error = 'Invalid credentials. Use the demo values shown below.'
+        error = 'Invalid email or password.'
     return render_template_string(LOGIN_PAGE, error=error)
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
-    if not get_current_user():
-        return redirect(url_for('login'))
     initialize_database()
     ensure_seed_data()
     profiles = get_profiles()
@@ -191,16 +190,14 @@ def dashboard():
         user_role=user_role,
         user_name=session.get('user_name'),
         department=session.get('department'),
-        admin_token=ADMIN_TOKEN,
         user_profile=user_profile,
         agent_alerts=agent_alerts
     )
 
 
 @app.route('/trigger', methods=['POST'])
+@login_required
 def trigger():
-    if not get_current_user():
-        return redirect(url_for('login'))
     trap_id = request.form.get('trap_id')
     trap = next((item for item in TRAP_DEFINITIONS if item['id'] == trap_id), None)
     if not trap:
@@ -239,7 +236,7 @@ ADMIN_PAGE = """
     .pill.mid{background:rgba(247,199,74,.14);color:#f7c74e;}
     .pill.high{background:rgba(255,92,122,.14);color:#ff6c6c;}
     .note{background:rgba(255,255,255,.05);padding:18px;border-radius:18px;color:#a7cfe5;margin-top:16px;}
-    a.logout{display:inline-block;padding:12px 16px;background:#1f4260;color:#fff;border-radius:14px;text-decoration:none;}
+    a.logout,button.logout{display:inline-block;padding:12px 16px;background:#1f4260;color:#fff;border:0;border-radius:14px;text-decoration:none;cursor:pointer;}
   </style>
 </head>
 <body>
@@ -250,7 +247,8 @@ ADMIN_PAGE = """
         <p style="color:#7ca8c9;margin:8px 0 0;">Logged in as {{ user_name }} · {{ department }}</p>
       </div>
       <div class="button-row">
-        <a class="logout" href="/logout">Logout</a>
+        <form method="POST" action="/logout" style="display:inline;margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="logout" type="submit">Logout</button></form>
       </div>
     </div>
     <div class="card metrics">
@@ -289,7 +287,7 @@ ADMIN_PAGE = """
           <p style="color:#7ca8c9;margin:8px 0 0;">Review where the phish came from, affected user, and quarantine status.</p>
         </div>
         <form method="POST" action="/admin/actions" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-          <input name="admin_token" placeholder="Admin token" autocomplete="off" style="padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#081823;color:#e9f7ff;" />
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <button name="action" value="run_sentinel">Run Sentinel</button>
           <button name="action" value="export_events">Export Logs</button>
         </form>
@@ -333,7 +331,7 @@ EMPLOYEE_PAGE = """
     .page{padding:24px;max-width:1000px;margin:0 auto;}
     .header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:24px;}
     h1{margin:0;font-size:2rem;}
-    a.logout{display:inline-block;padding:10px 14px;background:#1f4260;color:#fff;border-radius:12px;text-decoration:none;font-size:.9rem;}
+    a.logout,button.logout{display:inline-block;padding:10px 14px;background:#1f4260;color:#fff;border:0;border-radius:12px;text-decoration:none;font-size:.9rem;cursor:pointer;}
     .inbox-container{background:#0f1f30;border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:20px;}
     .email-item{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:18px;margin-bottom:14px;cursor:pointer;transition:all .2s ease;}
     .email-item:hover{background:rgba(255,255,255,.08);border-color:rgba(57,213,224,.3);transform:translateX(4px);}
@@ -359,7 +357,8 @@ EMPLOYEE_PAGE = """
         <h1>📧 Email Inbox</h1>
         <p style="color:#7ca8c9;margin:8px 0 0;">{{ user_name }} · {{ department }}</p>
       </div>
-      <a class="logout" href="/logout">Logout</a>
+      <form method="POST" action="/logout" style="display:inline;margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="logout" type="submit">Logout</button></form>
     </div>
 
     {% if user_profile and user_profile.status == 'LOCKED' %}
@@ -393,6 +392,7 @@ EMPLOYEE_PAGE = """
       <p style="color:#7ca8c9;margin-bottom:16px;">You have {{ traps|length }} pending messages:</p>
       {% for trap in traps %}
       <form method="POST" action="/trigger" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="trap_id" value="{{ trap.id }}" />
         <button type="submit" style="background:none;border:none;width:100%;text-align:left;padding:0;cursor:pointer;">
           <div class="email-item">
@@ -503,6 +503,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
       <div class="button-row">
         {% for trap in traps %}
           <form method="POST" action="/trigger" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <input type="hidden" name="trap_id" value="{{trap.id}}" />
             <button type="submit">{{trap.label}}</button>
           </form>
@@ -557,27 +558,6 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
       </div>
     </section>
 
-    <section class="card span4">
-      <h2>Demo Credentials</h2>
-      <div class="list-item" style="grid-template-columns:1fr;">
-        <strong>Admin token</strong>
-        <span style="color:var(--muted);">AdminDemo!2026</span>
-      </div>
-      <div class="list-item" style="grid-template-columns:1fr;">
-        <strong>Phished user</strong>
-        <span style="color:var(--muted);">alice.vance@ecofinance.local</span>
-        <span style="color:var(--muted);">Hunter22!</span>
-      </div>
-      <div class="control-panel" style="margin-top:12px;">
-        <form method="POST" action="/admin/actions">
-          <input name="admin_token" placeholder="Admin token" autocomplete="off" />
-          <div class="button-row" style="margin-top:12px;">
-            <button name="action" value="run_sentinel" class="control-button">Run Sentinel</button>
-            <button name="action" value="export_events" class="control-button">Export Events</button>
-          </div>
-        </form>
-      </div>
-    </section>
   </div>
 </div>
 
@@ -590,6 +570,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     <p>{{notice_event.details}}</p>
     <p style="color:var(--muted);">Recommended actions: change the password, report the event to admin, and do not reuse credentials.</p>
     <form method="POST" action="/api/report">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input type="hidden" name="user" value="{{notice_event.user}}" />
       <input type="hidden" name="event_id" value="{{notice_event.id}}" />
       <textarea name="note" placeholder="Optional report note"></textarea>
