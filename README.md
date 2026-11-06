@@ -1,123 +1,63 @@
-# 🛡️ ECOSHIELD AGENT
+# 🛡️ ECOSHIELD
 
-**Human-Risk Simulation & SOAR Workflow Prototype**
+**Lightweight security readiness for small teams.**
 
----
+ECOSHIELD is an early-stage EcoTechLabs project exploring a practical way for small organisations to assess human-related security risks, deliver targeted awareness education, and measure improvement without needing a dedicated SOC team.
 
-### 📖 Overview
+The intended product loop is:
 
-ECOSHIELD is a prototype cybersecurity framework designed to simulate how human-risk signals (e.g., phishing interaction, credential misuse) can trigger automated response workflows in a Security Operations (SOC) environment.
+1. **Assess** — run controlled security-awareness campaigns.
+2. **Observe** — record safe behaviours such as clicking, reporting, or completing an exercise.
+3. **Explain** — show what the signal means and why it matters.
+4. **Educate** — provide short, relevant learning.
+5. **Retest** — measure whether behaviour improves.
+6. **Report** — give administrators a clear view of team readiness.
 
-The project focuses on bridging **user behavior analysis** with **automated mitigation logic**, demonstrating how deception-based signals can be used to drive SOAR-like responses.
+The product direction and MVP acceptance criteria are documented in [docs/ECOSHIELD_MVP_BLUEPRINT.md](docs/ECOSHIELD_MVP_BLUEPRINT.md).
 
----
+## Current prototype
 
-### 🧠 Core Concept
+The repository currently contains:
 
-Instead of relying purely on system logs, ECOSHIELD explores:
+- `web_dashboard.py` — Flask web dashboard, demo login, event feed, employee profiles, and rule-based response workflow.
+- `trap.py` — controlled department-level simulation endpoint. It does not request real employee passwords.
+- `vault.py` — SQLite employee profile and risk-score setup.
+- `sentinel.py` — rule-based monitoring and simulated account-status changes.
+- `dashboard.py` — lightweight terminal risk view.
+- `general.py` — terminal summary report.
 
-* Detection of risky user behavior via controlled deception (honey-tokens)
-* Mapping those signals into automated response actions
-* Isolating impact based on contextual risk (e.g., department-level)
+**Important:** The current implementation is a prototype. Scheduled campaign management, reliable per-employee assignment, targeted learning progress, and measured retesting are not yet complete. The existing dashboard uses a single configured employee demo login. Do not describe the prototype as a complete or production-ready security platform.
 
-This serves as a **proof-of-concept for integrating human-risk intelligence into SOC automation pipelines**.
+## Product and safety principles
 
----
+- Never collect real passwords, authentication codes, or other employee secrets.
+- Use controlled scenarios and synthetic data for demonstrations.
+- Make risk indicators explainable and avoid treating one interaction as proof of compromise.
+- Do not shame employees or expose public employee rankings.
+- Clearly distinguish simulated response actions from actions actually carried out by an integration.
+- The current event watcher is rule-based, not an AI detection engine.
+- The current prototype does not perform verified network isolation or real identity-provider account lockout.
 
-### ⚙️ System Components
+## Dashboard security configuration
 
-* **Vault (`vault.py`)**
-  SQLite-based store for user identity and simulated risk scoring.
+The dashboard fails closed unless these server-side environment variables are configured:
 
-* **Trap (`trap.py`)**
-  Flask-based simulation layer used to trigger user interactions and emulate phishing/deception scenarios.
+- `ECOSHIELD_SECRET_KEY` — at least 32 characters.
+- `ECOSHIELD_ADMIN_EMAIL`
+- `ECOSHIELD_ADMIN_PASSWORD` — at least 12 characters.
+- `ECOSHIELD_EMPLOYEE_EMAIL`
+- `ECOSHIELD_EMPLOYEE_PASSWORD` — at least 12 characters.
 
-* **Sentinel (`sentinel.py`)**
-  Rule-based automation engine that monitors events and executes predefined response actions.
+Use unique private values. Never commit secrets or expose them in client-side code.
 
-* **Dashboard (`dashboard.py`)**
-  Lightweight command-line interface for visualizing simulated risk states and system activity.
+The dashboard uses signed sessions with HttpOnly and SameSite=Lax cookies, a 30-minute session lifetime, CSRF protection on POST forms, a five-attempt-per-minute login limit, security response headers, and role checks on administrative routes. Sensitive dashboard APIs and event exports require an administrator session. The built-in server runs with debug disabled and binds to localhost by default.
 
----
-
-### 🔁 Simulated Workflow
-
-1. User interacts with a deception trigger (Trap)
-2. Event is recorded and evaluated against risk logic (Vault)
-3. Sentinel processes the event
-4. Predefined response action is triggered (e.g., simulated credential lock, session termination)
-5. Dashboard reflects updated system state
-
----
-
-### 🧪 Purpose & Scope
-
-This project is a **controlled simulation environment**, intended to:
-
-* Demonstrate SOAR workflow logic
-* Explore human-risk-driven detection models
-* Serve as a foundation for future integration with real security tools (e.g., SIEM, IAM, EDR)
-
----
-
-### 🔌 Future Integration Direction
-
-Planned evolution includes:
-
-* Integration with external logging systems (SIEM)
-* API-based response actions (identity/access control systems)
-* Enhanced detection logic (multi-vector threat simulation)
-* AI-assisted log interpretation for SOC analysts
-
----
-
-### 🔐 Simulation Endpoint Security
-
-The simulation form does not request employee email addresses or passwords. It records only a controlled department-level test event.
-
-The `POST /capture` endpoint requires HTTP Basic authentication:
-- Username: `simulator`
-- Password: the value configured in the server environment variable `ECOSHIELD_SIMULATION_TOKEN`
-
-Set a long, unique token in the hosting environment before using the capture endpoint. Do not commit the token to the repository or place it in client-side code. If the variable is not configured, capture is disabled and the endpoint returns HTTP 503.
-
-The endpoint accepts only the predefined department keys (`finance`, `hr`, and `it`) and is limited to five requests per minute per client address. The default rate-limit storage is in-memory for local development. For multi-worker or production deployments, configure `RATELIMIT_STORAGE_URI` to use a shared rate-limit backend such as Redis.
-
-For local development, set the environment variable before starting the app:
-
-```bash
-export ECOSHIELD_SIMULATION_TOKEN='replace-with-a-long-random-token'
-python trap.py
-```
-
-When prompted by the browser, use username `simulator` and the configured token. Use a different secret-management method for your hosting platform; never put real employee credentials into this simulation.
-
----
-
-### ⚠️ Disclaimer
-
-ECOSHIELD is a **prototype and research-oriented project**.
-It is not intended for production deployment in its current form.
-
----
-
-### 👤 Author
-
-Developed by **eco4x**
-Part of EcoTechLabs Security Research
-
-### Dashboard security configuration
-
-The dashboard fails closed unless these server-side environment variables are configured: `ECOSHIELD_SECRET_KEY` (at least 32 characters), `ECOSHIELD_ADMIN_EMAIL`, `ECOSHIELD_ADMIN_PASSWORD` (at least 12 characters), `ECOSHIELD_EMPLOYEE_EMAIL`, and `ECOSHIELD_EMPLOYEE_PASSWORD` (at least 12 characters). Use unique private values. Do not commit secrets or expose them in client-side code. The former hard-coded demo accounts and admin token have been removed.
-
-The dashboard uses signed sessions with HttpOnly and SameSite=Lax cookies, a 30-minute session lifetime, CSRF protection on POST forms, and a five-attempt-per-minute login limit. Sensitive dashboard APIs, administrative actions, and event exports require an administrator session. Employee incident reports are restricted to events belonging to that employee. Security response headers are enabled. The built-in server runs with debug disabled and binds to localhost by default.
-
-For local HTTP development only, set `ECOSHIELD_COOKIE_SECURE=false`; leave secure cookies enabled behind HTTPS. The built-in Flask server is for local testing only. Use a production WSGI server behind HTTPS for deployment. Set `ECOSHIELD_HOST` only when a different bind address is intentionally required.
+For local HTTP development only, set `ECOSHIELD_COOKIE_SECURE=false`. Leave secure cookies enabled behind HTTPS. The built-in Flask server is for local testing only; use a production WSGI server behind HTTPS for deployment.
 
 Example local configuration (replace all values; never commit them):
 
 ```bash
-export ECOSHIELD_SECRET_KEY='replace-with-at-least-32-random-characters'
+export ECOSHIELD_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 export ECOSHIELD_ADMIN_EMAIL='admin@example.test'
 export ECOSHIELD_ADMIN_PASSWORD='replace-with-a-long-unique-password'
 export ECOSHIELD_EMPLOYEE_EMAIL='employee@example.test'
@@ -125,3 +65,29 @@ export ECOSHIELD_EMPLOYEE_PASSWORD='replace-with-another-long-unique-password'
 export ECOSHIELD_COOKIE_SECURE=false
 python web_dashboard.py
 ```
+
+## Simulation endpoint security
+
+The `POST /capture` endpoint in `trap.py` requires HTTP Basic authentication:
+
+- Username: `simulator`
+- Password: the value configured in `ECOSHIELD_SIMULATION_TOKEN`
+
+If the token is not configured, capture is disabled and the endpoint returns HTTP 503. The endpoint accepts only predefined department keys (`finance`, `hr`, and `it`) and is limited to five requests per minute per client address.
+
+For local development:
+
+```bash
+export ECOSHIELD_SIMULATION_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python trap.py
+```
+
+Do not put the token in source control or client-side code. The default rate-limit storage is in-memory; a shared backend is needed for multi-worker deployments.
+
+## Development status
+
+ECOSHIELD is under active development and is not intended for production deployment in its current form. Features should be described as implemented only after they are integrated and tested end-to-end.
+
+## Author
+
+Developed by **eco4x** · EcoTechLabs
