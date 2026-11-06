@@ -19,14 +19,15 @@ The product direction and MVP acceptance criteria are documented in [docs/ECOSHI
 
 The repository currently contains:
 
-- `web_dashboard.py` — Flask web dashboard, demo login, event feed, employee profiles, and rule-based response workflow.
+- `web_dashboard.py` — Flask dashboard, demo login, event feed, employee profiles, basic campaign planner, employee assessment/learning pages, and rule-based response workflow.
+- `assessment_engine.py` — SQLite-backed campaign scheduling, team assignments, safe interaction recording, and scenario-specific learning recommendations.
 - `trap.py` — controlled department-level simulation endpoint. It does not request real employee passwords.
 - `vault.py` — SQLite employee profile and risk-score setup.
 - `sentinel.py` — rule-based monitoring and simulated account-status changes.
 - `dashboard.py` — lightweight terminal risk view.
 - `general.py` — terminal summary report.
 
-**Important:** The current implementation is a prototype. Scheduled campaign management, reliable per-employee assignment, targeted learning progress, and measured retesting are not yet complete. The existing dashboard uses a single configured employee demo login. Do not describe the prototype as a complete or production-ready security platform.
+**Important:** The current implementation is a prototype. Basic campaign creation, due-campaign activation on dashboard visits, per-employee assignment, safe response recording, and scenario-specific lesson completion have now been added on the `security/harden-trap-capture` branch. This is an early workflow: it does not yet run from a persistent background scheduler, send real emails, support multiple employee logins, or provide a retest comparison. The dashboard uses one configured employee demo login. Do not describe the prototype as a complete or production-ready security platform.
 
 ## Product and safety principles
 
