@@ -8,6 +8,11 @@ import sqlite3
 import os
 from io import StringIO
 from datetime import datetime, timedelta
+from assessment_engine import (
+    initialize_assessment_schema, create_campaign, activate_due_campaigns,
+    list_campaigns, list_employee_assignments, record_interaction,
+    complete_learning, scenario_options,
+)
 app = Flask(__name__)
 secret_key = os.environ.get('ECOSHIELD_SECRET_KEY', '')
 required_credentials = {
@@ -159,6 +164,11 @@ def logout():
 def dashboard():
     initialize_database()
     ensure_seed_data()
+    assessment_conn = get_db_connection()
+    activate_due_campaigns(assessment_conn)
+    campaigns = list_campaigns(assessment_conn)
+    assignments = list_employee_assignments(assessment_conn, session.get('user_name')) if get_current_user() == 'employee' else []
+    assessment_conn.close()
     profiles = get_profiles()
     events = get_latest_events()
     agent_alerts = get_agent_alerts()
@@ -192,8 +202,64 @@ def dashboard():
         user_name=session.get('user_name'),
         department=session.get('department'),
         user_profile=user_profile,
-        agent_alerts=agent_alerts
+        agent_alerts=agent_alerts,
+        campaigns=campaigns,
+        assignments=assignments,
+        scenario_options=scenario_options()
     )
+
+
+@app.route('/campaigns/create', methods=['POST'])
+@admin_required
+def campaign_create():
+    initialize_database()
+    ensure_seed_data()
+    conn = get_db_connection()
+    try:
+        create_campaign(
+            conn,
+            request.form.get('name', ''),
+            request.form.get('department', ''),
+            request.form.get('scenario_key', ''),
+            request.form.get('scheduled_at', ''),
+            session.get('user_name'),
+            os.environ.get('ECOSHIELD_TIMEZONE', 'Africa/Kampala'),
+        )
+    except ValueError as exc:
+        conn.close()
+        return str(exc), 400
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/assessments/<int:assignment_id>/respond', methods=['POST'])
+@login_required
+def assessment_respond(assignment_id):
+    if get_current_user() != 'employee':
+        return 'Employee access required', 403
+    conn = get_db_connection()
+    try:
+        record_interaction(conn, assignment_id, session.get('user_name'), request.form.get('interaction', ''))
+    except (ValueError, LookupError) as exc:
+        conn.close()
+        return str(exc), 400
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/assessments/<int:assignment_id>/learning-complete', methods=['POST'])
+@login_required
+def learning_complete(assignment_id):
+    if get_current_user() != 'employee':
+        return 'Employee access required', 403
+    conn = get_db_connection()
+    try:
+        complete_learning(conn, assignment_id, session.get('user_name'))
+    except LookupError as exc:
+        conn.close()
+        return str(exc), 404
+    conn.close()
+    return redirect(url_for('dashboard'))
 
 
 @app.route('/trigger', methods=['POST'])
@@ -253,10 +319,32 @@ ADMIN_PAGE = """
       </div>
     </div>
     <div class="card metrics">
-      <div class="metric"><strong>{{ active_events }}</strong><span>Active incidents</span></div>
-      <div class="metric"><strong>—</strong><span>Admin risk</span></div>
-      <div class="metric"><strong>{{ locked_count }}</strong><span>Locked accounts</span></div>
+      <div class="metric"><strong>{{ active_events }}</strong><span>Active demo events</span></div>
+      <div class="metric"><strong>{{ campaigns|length }}</strong><span>Campaigns</span></div>
+      <div class="metric"><strong>{{ locked_count }}</strong><span>High-risk demo profiles</span></div>
       <div class="metric"><strong>{{ event_count }}</strong><span>Total events</span></div>
+    </div>
+    <div class="card">
+      <h2>Campaign planner</h2>
+      <p style="color:#7ca8c9;">Schedule a controlled assessment for a team. Due campaigns are activated by the lightweight scheduler. Employee interactions are recorded as training signals only.</p>
+      <form method="POST" action="/campaigns/create" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;align-items:end;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label>Campaign name<input name="name" maxlength="80" required placeholder="November security check" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
+        <label>Audience<select name="department" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option>All teams</option><option>Finance</option><option>Human Resources</option><option>IT Operations</option></select></label>
+        <label>Scenario<select name="scenario_key" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;">{% for scenario in scenario_options %}<option value="{{ scenario.key }}">{{ scenario.title }}</option>{% endfor %}</select></label>
+        <label>Schedule (Kampala time)<input type="datetime-local" name="scheduled_at" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
+        <button type="submit">Schedule assessment</button>
+      </form>
+      <h3 style="margin-top:24px;">Campaign activity</h3>
+      {% for campaign in campaigns %}
+        <div class="event-item">
+          <strong>{{ campaign.name }}</strong> · {{ campaign.department }} · {{ campaign.scenario_key }}
+          <p style="color:#7ca8c9;margin:8px 0;">{{ campaign.scheduled_at }} UTC · Status: {{ campaign.status }}</p>
+          <p style="color:#a7cfe5;margin:0;">Assigned: {{ campaign.assigned_count }} · Completed: {{ campaign.completed_count or 0 }}</p>
+        </div>
+      {% else %}
+        <p style="color:#7ca8c9;">No campaigns scheduled yet.</p>
+      {% endfor %}
     </div>
     {% if agent_alerts %}
     <div class="card">
@@ -360,6 +448,49 @@ EMPLOYEE_PAGE = """
       </div>
       <form method="POST" action="/logout" style="display:inline;margin:0;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="logout" type="submit">Logout</button></form>
+    </div>
+
+    <div class="inbox-container" style="margin-bottom:20px;">
+      <h2>Scheduled security checks</h2>
+      <p style="color:#7ca8c9;">Review each controlled scenario and choose the response you would take. Never enter a real password or authentication code.</p>
+      {% for assignment in assignments %}
+        <div class="email-item">
+          <div class="email-header">
+            <div>
+              <div class="email-from">{{ assignment.scenario_sender }}</div>
+              <div class="email-subject">{{ assignment.scenario_subject }}</div>
+              <div class="email-preview">{{ assignment.scenario_message }}</div>
+            </div>
+            <div class="email-time">{{ assignment.status }}</div>
+          </div>
+          <p style="color:#a7cfe5;">Campaign: {{ assignment.campaign_name }} · {{ assignment.scenario_title }}</p>
+          {% if assignment.status == 'assigned' %}
+            <form method="POST" action="{{ url_for('assessment_respond', assignment_id=assignment.id) }}" style="display:flex;flex-wrap:wrap;gap:10px;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <button name="interaction" value="reported" type="submit">Report as suspicious</button>
+              <button name="interaction" value="clicked" type="submit">I would open it</button>
+              <button name="interaction" value="ignored" type="submit">Ignore for now</button>
+            </form>
+          {% else %}
+            <p><strong>Recorded response:</strong> {{ assignment.interaction }} · {{ assignment.signal }}</p>
+            <div class="awareness-box">
+              <strong>🎓 {{ assignment.lesson_title }}</strong>
+              <p>{{ assignment.lesson }}</p>
+              <p><strong>Next step:</strong> {{ assignment.next_step }}</p>
+              {% if assignment.learning_status == 'completed' %}
+                <p>Learning completed.</p>
+              {% else %}
+                <form method="POST" action="{{ url_for('learning_complete', assignment_id=assignment.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button type="submit">Mark lesson complete</button>
+                </form>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      {% else %}
+        <p style="color:#7ca8c9;">No scheduled assessments are assigned to this account yet.</p>
+      {% endfor %}
     </div>
 
     {% if user_profile and user_profile.status == 'LOCKED' %}
@@ -679,6 +810,7 @@ def initialize_database():
             escalation_status TEXT,
             isolation_details TEXT
         )''')
+    initialize_assessment_schema(conn)
     conn.commit()
     conn.close()
 
