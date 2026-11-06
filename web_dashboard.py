@@ -961,28 +961,37 @@ def get_user_profile():
 
 
 @app.route('/api/report', methods=['POST'])
+@login_required
 def api_report():
-    data = request.form or request.json or {}
-    user = data.get('user')
-    event_id = data.get('event_id')
-    note = data.get('note', '')
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    data = request.form if request.form else (request.get_json(silent=True) or {})
+    try:
+        event_id = int(data.get('event_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'A valid event_id is required'}), 400
+    note = str(data.get('note', '')).strip()[:2000]
     conn = get_db_connection()
     cur = conn.cursor()
+    event = cur.execute('SELECT user FROM events WHERE id = ?', (event_id,)).fetchone()
+    if not event:
+        conn.close()
+        return jsonify({'error': 'Event not found'}), 404
+    user = event['user']
+    if get_current_user() == 'employee' and user != session.get('user_name'):
+        conn.close()
+        return jsonify({'error': 'You may only report your own events'}), 403
+    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
     cur.execute('INSERT INTO reports (timestamp, user, event_id, note) VALUES (?, ?, ?, ?)', (ts, user, event_id, note))
     conn.commit()
     conn.close()
-    if request.content_type and 'application/json' in request.content_type:
+    if request.is_json:
         return jsonify({'ok': True}), 201
     return redirect(url_for('dashboard', notice_id=event_id, reported='1'))
 
 
 @app.route('/admin/actions', methods=['POST'])
+@admin_required
 def admin_actions():
-    token = request.form.get('admin_token')
     action = request.form.get('action')
-    if token != ADMIN_TOKEN:
-        return "Unauthorized (invalid admin token)", 401
     if action == 'run_sentinel':
         process_sentinel()
         return redirect(url_for('dashboard'))
@@ -992,6 +1001,7 @@ def admin_actions():
 
 
 @app.route('/export')
+@admin_required
 def export_events():
     fmt = request.args.get('format', 'csv')
     conn = get_db_connection()
@@ -1011,6 +1021,7 @@ def export_events():
 
 
 @app.route('/api/status')
+@admin_required
 def api_status():
     profiles = get_profiles()
     return jsonify({
@@ -1022,16 +1033,19 @@ def api_status():
 
 
 @app.route('/api/events')
+@admin_required
 def api_events():
     return jsonify(get_latest_events(50))
 
 
 @app.route('/api/profiles')
+@admin_required
 def api_profiles():
     return jsonify(get_profiles())
 
 
 @app.route('/api/ai/analyze', methods=['POST'])
+@admin_required
 def ai_analyze():
     data = request.json or {}
     events = data.get('events') or []
@@ -1051,4 +1065,4 @@ def ai_analyze():
 if __name__ == '__main__':
     initialize_database()
     ensure_seed_data()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host=os.environ.get('ECOSHIELD_HOST', '127.0.0.1'), port=int(os.environ.get('PORT', '5000')), debug=False)
