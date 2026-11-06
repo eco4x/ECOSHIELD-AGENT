@@ -3,6 +3,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+import hmac
 import sqlite3
 import os
 from io import StringIO
@@ -134,9 +135,9 @@ def login():
     error = None
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '').strip()
+        password = request.form.get('password', '')
         for role, user in CREDENTIALS.items():
-            if email == user['email'] and password == user['password']:
+            if hmac.compare_digest(email, user['email']) and hmac.compare_digest(password, user['password']):
                 session.clear()
                 session.permanent = True
                 session['user_role'] = role
@@ -164,16 +165,16 @@ def dashboard():
     notice_id = request.args.get('notice_id')
     report_success = request.args.get('reported') == '1'
     notice_event = None
+    user_role = get_current_user()
     if notice_id:
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute('SELECT * FROM events WHERE id = ?', (notice_id,))
         row = cur.fetchone()
-        if row:
+        if row and (user_role == 'admin' or row['user'] == session.get('user_name')):
             notice_event = dict(row)
-            notice_event['details'] = row['details'] + ' Recommended actions: change password, report to admin.'
+            notice_event['details'] = row['details'] + ' Recommended actions: report the simulation and review the linked learning guidance.'
         conn.close()
-    user_role = get_current_user()
     user_profile = get_user_profile()
     template = ADMIN_PAGE if user_role == 'admin' else EMPLOYEE_PAGE
     return render_template_string(template,
@@ -259,8 +260,8 @@ ADMIN_PAGE = """
     </div>
     {% if agent_alerts %}
     <div class="card">
-      <h2>🤖 AI Agent Watcher - Automated Alerts</h2>
-      <p style="color:#7ca8c9;margin:8px 0 0;">24/7 autonomous defense system. AI agent automatically analyzes incidents, locks risky accounts, and escalates to incident team.</p>
+      <h2>Rule-Based Security Watcher — Alerts</h2>
+      <p style="color:#7ca8c9;margin:8px 0 0;">Transparent demo rules evaluate recorded simulation events and suggest follow-up actions. This prototype does not perform real account lockout, network isolation, or external escalation.</p>
       {% for alert in agent_alerts %}
       <div class="event-item" style="border-left: 4px solid {% if alert.severity == 'CRITICAL' %}#ff6c6c{% elif alert.severity == 'HIGH' %}#f7c74e{% else %}#5ce2a3{% endif %};">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
@@ -273,7 +274,7 @@ ADMIN_PAGE = """
         <p style="margin:12px 0;color:#c7dfea;"><strong>Action:</strong> {{ alert.action }}</p>
         <p style="margin:12px 0;color:#a7cfe5;"><strong>Analysis:</strong> {{ alert.reason }}</p>
         <div style="margin-top:12px;padding:12px;background:rgba(255,255,255,.03);border-radius:12px;color:#8da8c3;font-size:.95rem;">
-          <strong>Isolation:</strong> {{ alert.isolation_details }}<br/>
+          <strong>Response note:</strong> {{ alert.isolation_details }}<br/>
           <strong>Status:</strong> {{ alert.escalation_status }}
         </div>
       </div>
@@ -284,7 +285,7 @@ ADMIN_PAGE = """
       <div class="header">
         <div>
           <h2>Phish Investigation Feed</h2>
-          <p style="color:#7ca8c9;margin:8px 0 0;">Review where the phish came from, affected user, and quarantine status.</p>
+          <p style="color:#7ca8c9;margin:8px 0 0;">Review the controlled simulation, affected demo profile, and recorded status.</p>
         </div>
         <form method="POST" action="/admin/actions" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -307,12 +308,12 @@ ADMIN_PAGE = """
           <span><strong>Host</strong><br />{{ event.source_host or 'Unknown' }}</span>
           <span><strong>Network</strong><br />{{ event.source_network or 'Unknown' }}</span>
         </div>
-        <div style="margin-top:12px;color:#99bcd9;font-size:.95rem;"><strong>Isolation:</strong> {{ event.source_network or 'Unknown' }} quarantined from the main network for investigation.</div>
+        <div style="margin-top:12px;color:#99bcd9;font-size:.95rem;"><strong>Response:</strong> Demo event recorded only. No device or network isolation was performed.</div>
       </div>
       {% endfor %}
     </div>
     <div class="card note">
-      <strong>Admin guidance:</strong> Use this console to identify the click source, isolate the impacted machine, and coordinate response actions.
+      <strong>Admin guidance:</strong> Review the evidence, assign targeted learning, and document any real-world response separately. The actions shown here are simulation records.
     </div>
   </div>
 </body>
@@ -363,20 +364,20 @@ EMPLOYEE_PAGE = """
 
     {% if user_profile and user_profile.status == 'LOCKED' %}
     <div class="locked-notice">
-      <h2>🔒 Account Locked - Security Incident</h2>
-      <p><strong>Status:</strong> <span class="status-chip">LOCKED</span></p>
+      <h2>⚠️ Training Risk Threshold Reached — Demo Status</h2>
+      <p><strong>Demo profile status:</strong> <span class="status-chip">HIGH RISK</span></p>
       <p><strong>Risk Score:</strong> {{ user_profile.risk_score }} points (Critical Threshold Exceeded)</p>
-      <p><strong>Reason:</strong> Your account was locked after a phishing simulation was triggered. This protective measure prevents unauthorized access to company systems and data.</p>
-      <p><strong>What Happened:</strong> You clicked a malicious link or opened a suspicious attachment. The attack successfully captured credentials or established unauthorized access.</p>
+      <p><strong>Reason:</strong> Your training risk indicator crossed the configured threshold after a controlled simulation. No real company account has been locked by this prototype.</p>
+      <p><strong>What Happened:</strong> The exercise recorded an interaction with a simulated phishing scenario. It did not capture real credentials or establish access to company systems.</p>
       <p><strong>Next Steps:</strong></p>
       <ul style="margin:8px 0;padding-left:20px;">
         <li>Contact your IT/Security team immediately</li>
-        <li>Do NOT reuse this password on any other system</li>
-        <li>Change your password once account is restored</li>
-        <li>Review the security awareness training below</li>
+        <li>Report suspicious messages using your organisation's approved process</li>
+        <li>Review the short security lesson below</li>
+        <li>Apply the guidance in the next simulation</li>
       </ul>
       <div class="awareness-box">
-        <strong>🎓 Cyber Awareness Training:</strong>
+        <strong>🎓 Recommended Cyber Awareness:</strong>
         <p>Phishing attacks are the #1 cause of data breaches. Attackers use social engineering, urgency, and trust to trick employees. Always:</p>
         <ul style="margin:8px 0;padding-left:20px;">
           <li>Verify sender email addresses carefully</li>
@@ -411,7 +412,7 @@ EMPLOYEE_PAGE = """
       {% endfor %}
     </div>
     <div style="margin-top:20px;padding:16px;background:rgba(255,255,255,.04);border-radius:12px;color:#8da8c3;font-size:.9rem;">
-      <strong>Inbox Help:</strong> Click any email to open it. This is a security awareness simulation - your responses help train security reflexes. If you click a suspicious link/attachment, your account will be locked as a protective measure.
+      <strong>Inbox Help:</strong> This is a controlled security-awareness simulation. Your interaction is recorded as a training signal only. Never enter a real password, authentication code, or personal information.
     </div>
     {% endif %}
   </div>
@@ -486,8 +487,8 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
 <div class="page">
   <header>
     <div>
-      <h1>ECOSHIELD SOC Dashboard</h1>
-      <p class="intro">Interactive SOC demo with trap simulation, Vault risk profiles, automatic sentinel response, and demo awareness notes.</p>
+      <h1>ECOSHIELD Security Readiness</h1>
+      <p class="intro">A lightweight small-team prototype for controlled security simulations, explainable risk signals, employee learning, and follow-up review.</p>
     </div>
     <div class="card" style="min-width:280px;">
       <div class="metric"><strong>{{active_events}}</strong><span>Active Traps</span></div>
@@ -566,9 +567,9 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
   <div class="modal-content">
     <h3>Security Awareness Notice</h3>
     <p>This simulation is a controlled training environment from EcoTechLabs.</p>
-    <p><strong>{{notice_event.user}}</strong> submitted credentials into a phish trap.</p>
+    <p><strong>{{notice_event.user}}</strong> interacted with a simulated security scenario. No real credentials were collected.</p>
     <p>{{notice_event.details}}</p>
-    <p style="color:var(--muted);">Recommended actions: change the password, report the event to admin, and do not reuse credentials.</p>
+    <p style="color:var(--muted);">Recommended actions: report the suspicious message, review the relevant learning guidance, and apply it during the next assessment.</p>
     <form method="POST" action="/api/report">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <input type="hidden" name="user" value="{{notice_event.user}}" />
@@ -598,21 +599,21 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
 """
 
 TRAP_DEFINITIONS = [
-    {"id": "finance-phish", "label": "Finance Phishing Email", "sender": "finance@bank-update.com", "preview": "Urgent: Verify your account - Click here", "user": "Alice Vance", "department": "Finance", "impact": 18, "event_type": "Credential Harvest"},
+    {"id": "finance-phish", "label": "Finance Phishing Email", "sender": "finance@bank-update.com", "preview": "Urgent: Review your account - Open the message", "user": "Alice Vance", "department": "Finance", "impact": 18, "event_type": "Phishing Link Interaction"},
     {"id": "hr-benefits", "label": "HR Benefits Alert", "sender": "HR Department", "preview": "New benefits package available - Review document", "user": "Marcus Ward", "department": "Human Resources", "impact": 14, "event_type": "Phishing Click"},
-    {"id": "it-maintenance", "label": "IT Maintenance Notice", "sender": "IT Support <support@company.local>", "preview": "Scheduled maintenance - Confirm access", "user": "Sarah Connor", "department": "IT Operations", "impact": 17, "event_type": "Password Entry"},
+    {"id": "it-maintenance", "label": "IT Maintenance Notice", "sender": "IT Support <support@company.local>", "preview": "Scheduled maintenance - Review the notice", "user": "Sarah Connor", "department": "IT Operations", "impact": 17, "event_type": "Suspicious Link"},
     {"id": "exec-target", "label": "Executive Fraud Link", "sender": "CEO Office", "preview": "Confidential: Board meeting minutes attached", "user": "Alice Vance", "department": "Finance", "impact": 22, "event_type": "Suspicious Access"},
     {"id": "benefits-update", "label": "Policy Update", "sender": "Compliance Team", "preview": "Updated security policy - Action required", "user": "Marcus Ward", "department": "Human Resources", "impact": 12, "event_type": "Suspicious Link"},
-    {"id": "it-alert", "label": "Account Verification", "sender": "Security <security@company.local>", "preview": "Unusual login detected - Verify identity", "user": "Sarah Connor", "department": "IT Operations", "impact": 16, "event_type": "Credential Replay"}
+    {"id": "it-alert", "label": "Account Verification", "sender": "Security <security@company.local>", "preview": "Unusual login detected - Review the alert", "user": "Sarah Connor", "department": "IT Operations", "impact": 16, "event_type": "Suspicious Access"}
 ]
 
 EVENT_TEMPLATES = {
-    "Credential Harvest": "Dummy credentials were submitted via a deceptive finance form.",
-    "Phishing Click": "A user clicked a compromised HR-style link and exposed the session.",
-    "Password Entry": "A fake maintenance page captured a login attempt.",
+    "Phishing Link Interaction": "A controlled phishing link interaction was recorded. No credentials were requested or collected.",
+    "Phishing Click": "A user interacted with a simulated HR-style link. No real session was exposed.",
+    "Password Entry": "A user reached a simulated maintenance page. No password field or credential collection was used.",
     "Suspicious Access": "An exec-style phishing page triggered a high-risk access event.",
     "Suspicious Link": "A policy update lure generated anomalous user behavior.",
-    "Credential Replay": "The page collected and replayed user credentials.",
+    "Credential Replay": "A simulated suspicious-access signal was recorded; no credentials were collected or replayed.",
 }
 
 STATUS_COLORS = [(0, "low"), (35, "mid"), (50, "high")]
@@ -771,7 +772,7 @@ def update_risk_for_user(trap):
 
 
 def run_ai_agent_watcher(trap):
-    """AI-assisted agent analyzes trap events 24/7 and takes automated action."""
+    """Apply transparent demo rules to a simulation event and record recommendations."""
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -822,8 +823,8 @@ def run_ai_agent_watcher(trap):
     # Create agent action record if action triggered
     if action:
         source = SOURCE_INFOS.get(trap['user'], {'network': 'Unclassified'})
-        isolation_details = f"Isolated from {source['network']} · Access revoked · Credentials flagged"
-        escalation_status = 'ESCALATED_TO_SOC' if severity in ['MEDIUM', 'HIGH'] else 'ESCALATED_TO_INCIDENT_TEAM'
+        isolation_details = 'No real isolation or access revocation performed; administrator review recommended.'
+        escalation_status = 'SIMULATED_RECOMMENDATION_ONLY'
         
         cur.execute('''
             INSERT INTO agent_actions (timestamp, user, action, reason, severity, escalation_status, isolation_details)
@@ -892,13 +893,13 @@ def get_incident_summary():
     cur.execute('SELECT user FROM events ORDER BY id DESC LIMIT 1')
     latest = cur.fetchone()
     latest_user = latest[0] if latest else 'None'
-    cur.execute("SELECT COUNT(*) FROM events WHERE status = 'active'")
-    active = cur.fetchone()[0]
+    cur.execute('SELECT COUNT(*) FROM agent_actions')
+    action_count = cur.fetchone()[0]
     conn.close()
     return {
         'highest_risk': f"{highest} pts",
         'recent_user': latest_user,
-        'actions_taken': active
+        'actions_taken': action_count
     }
 
 
