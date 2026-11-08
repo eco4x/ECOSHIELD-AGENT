@@ -10,12 +10,13 @@ import logging
 import os
 import signal
 import time
+import tempfile
 
 from web_dashboard import get_db_connection, initialize_database, ensure_seed_data
 from assessment_engine import activate_due_campaigns
 
 POLL_SECONDS = max(5, int(os.environ.get("ECOSHIELD_SCHEDULER_INTERVAL", "15")))
-LOCK_PATH = os.environ.get("ECOSHIELD_SCHEDULER_LOCK", "/tmp/ecoshield-scheduler.lock")
+LOCK_PATH = os.environ.get("ECOSHIELD_SCHEDULER_LOCK", os.path.join(tempfile.gettempdir(), "ecoshield-scheduler.lock"))
 running = True
 
 
