@@ -6,7 +6,6 @@ Run as a separate process alongside the Flask web service:
 The worker shares the application's SQLite database and activates due
 campaigns without requiring an administrator to open the dashboard.
 """
-import fcntl
 import logging
 import os
 import signal
@@ -34,10 +33,20 @@ def main():
     signal.signal(signal.SIGTERM, stop_worker)
     signal.signal(signal.SIGINT, stop_worker)
 
-    lock_file = open(LOCK_PATH, "w")
+    lock_file = open(LOCK_PATH, "a+")
     try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+        if os.name == "nt":
+            import msvcrt
+            lock_file.seek(0)
+            if not lock_file.read(1):
+                lock_file.write("0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError):
         logging.error("Another ECOSHIELD scheduler worker already holds the lock.")
         return 2
 
