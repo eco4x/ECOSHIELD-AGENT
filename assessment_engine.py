@@ -294,6 +294,20 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
         """,
         (interaction, signal, now_text, assignment_id),
     )
+
+    # Keep the legacy employee risk indicator aligned with assessment outcomes.
+    # These are bounded training signals, not evidence of account compromise.
+    risk_delta = {"clicked": 15, "ignored": 5, "reported": -5}[interaction]
+    conn.execute(
+        """
+        UPDATE employees
+        SET risk_score = MIN(100, MAX(0, COALESCE(risk_score, 0) + ?))
+        WHERE id = (
+            SELECT employee_id FROM assessment_assignments WHERE id = ?
+        )
+        """,
+        (risk_delta, assignment_id),
+    )
     conn.execute(
         """
         INSERT OR IGNORE INTO learning_progress
