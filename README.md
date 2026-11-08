@@ -27,7 +27,7 @@ The repository currently contains:
 - `dashboard.py` — lightweight terminal risk view.
 - `general.py` — terminal summary report.
 
-**Important:** The current implementation is a prototype. Basic campaign creation, due-campaign activation on dashboard visits, per-employee assignment, safe response recording, and scenario-specific lesson completion have now been added on the `security/harden-trap-capture` branch. This is an early workflow: it does not yet run from a persistent background scheduler, send real emails, support multiple employee logins, or provide a retest comparison. The dashboard uses one configured employee demo login. Do not describe the prototype as a complete or production-ready security platform.
+**Important:** The current implementation is a prototype. Campaign creation, per-employee assignment, safe response recording, scenario-specific lesson completion, and an independent polling scheduler worker are present on the `security/harden-trap-capture` branch. The scheduler worker must be run as a separate, single-instance process alongside the web service; it checks for due campaigns every 15 seconds by default and uses a process lock to prevent duplicate workers on one host. Assessment interactions update a bounded 0–100 employee risk indicator using documented training-signal weights (clicked +15, ignored +5, reported −5). These are awareness indicators, not evidence of compromise. The prototype still does not send real emails, support multiple employee logins, or provide a retest comparison. The dashboard uses one configured employee demo login. Do not describe the prototype as a complete or production-ready security platform.
 
 ## Product and safety principles
 
@@ -66,6 +66,14 @@ export ECOSHIELD_EMPLOYEE_PASSWORD='replace-with-another-long-unique-password'
 export ECOSHIELD_COOKIE_SECURE=false
 python web_dashboard.py
 ```
+
+In a second terminal or a separate Render Background Worker using the same environment variables, start the campaign scheduler:
+
+```bash
+python scheduler_worker.py
+```
+
+Run exactly one scheduler worker for this SQLite database. The worker and web service must use the same working directory and `ecoshield.db` file. On Render, deploy the worker as a separate Background Worker with the same repository branch and required environment variables; do not start the worker inside every web-server process.
 
 ## Simulation endpoint security
 
