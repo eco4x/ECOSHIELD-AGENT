@@ -271,9 +271,9 @@ def campaign_report_view(campaign_id):
         <h2>Campaign outcomes</h2>
         <div class="metrics">
           <div class="metric"><strong>{{ report.metrics.assigned_count }}</strong><small>Assigned</small></div>
-          <div class="metric"><strong>{{ report.metrics.completed_count }}</strong><small>Responses completed</small></div>
-          <div class="metric"><strong>{{ report.metrics.clicked_count }}</strong><small>Clicked</small></div>
-          <div class="metric"><strong>{{ report.metrics.reported_count }}</strong><small>Reported</small></div>
+          <div class="metric"><strong>{{ report.metrics.response_rate }}%</strong><small>Response rate</small></div>
+          <div class="metric"><strong>{{ report.metrics.click_rate }}%</strong><small>Click rate</small></div>
+          <div class="metric"><strong>{{ report.metrics.report_rate }}%</strong><small>Report rate</small></div>
           <div class="metric"><strong>{{ report.metrics.ignored_count }}</strong><small>Ignored</small></div>
           <div class="metric"><strong>{{ report.metrics.learning_completion_rate }}%</strong><small>Learning completion</small></div>
         </div>
