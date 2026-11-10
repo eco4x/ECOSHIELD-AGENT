@@ -1241,9 +1241,10 @@ def api_profiles():
     return jsonify(get_profiles())
 
 
-@app.route('/api/ai/analyze', methods=['POST'])
+@app.route('/api/readiness/analyze', methods=['POST'])
+@app.route('/api/ai/analyze', methods=['POST'])  # Backwards-compatible legacy path.
 @admin_required
-def ai_analyze():
+def readiness_analyze():
     """Legacy endpoint name; this is transparent rule-based training analysis, not AI."""
     data = request.get_json(silent=True) or request.form
     events = data.get('events') or []
