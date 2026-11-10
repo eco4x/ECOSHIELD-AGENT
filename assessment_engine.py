@@ -407,6 +407,7 @@ def _campaign_metrics(conn, campaign_id):
     metrics = dict(row)
     denominator = metrics["assigned_count"]
     learning_denominator = metrics["learning_assigned_count"]
+    metrics["response_rate"] = round(metrics["completed_count"] * 100 / denominator, 1) if denominator else 0.0
     metrics["click_rate"] = round(metrics["clicked_count"] * 100 / denominator, 1) if denominator else 0.0
     metrics["report_rate"] = round(metrics["reported_count"] * 100 / denominator, 1) if denominator else 0.0
     metrics["learning_completion_rate"] = (
