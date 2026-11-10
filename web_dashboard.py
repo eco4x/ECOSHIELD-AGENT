@@ -563,54 +563,28 @@ EMPLOYEE_PAGE = """
     {% if user_profile and user_profile.status in ['Needs Review', 'Training Recommended'] %}
     <div class="training-notice">
       <h2>⚠️ Additional Training Guidance Recommended</h2>
-      <p><strong>Demo profile status:</strong> <span class="status-chip">HIGH RISK</span></p>
+      <p><strong>Demo profile status:</strong> <span class="status-chip">TRAINING REVIEW</span></p>
       <p><strong>Training indicator:</strong> {{ user_profile.risk_score }} points (review threshold reached)</p>
-      <p><strong>Reason:</strong> Your training indicator reached the configured review threshold after a controlled simulation. No real company account has been locked by this prototype.</p>
+      <p><strong>Reason:</strong> Your training indicator reached the configured review threshold after a controlled simulation. This is a learning signal, not evidence of compromise.</p>
       <p><strong>What Happened:</strong> The exercise recorded an interaction with a simulated security scenario. It did not capture real credentials or establish access to company systems.</p>
       <p><strong>Next Steps:</strong></p>
       <ul style="margin:8px 0;padding-left:20px;">
-        <li>Contact your IT/Security team immediately</li>
+        <li>Review the recommended lesson and next-step guidance</li>
         <li>Report suspicious messages using your organisation's approved process</li>
         <li>Review the short security lesson below</li>
         <li>Apply the guidance in the next simulation</li>
       </ul>
       <div class="awareness-box">
         <strong>🎓 Recommended Cyber Awareness:</strong>
-        <p>Phishing attacks are the #1 cause of data breaches. Attackers use social engineering, urgency, and trust to trick employees. Always:</p>
+        <p>Phishing and social engineering often rely on urgency, impersonation, and trust. Use these checks:</p>
         <ul style="margin:8px 0;padding-left:20px;">
           <li>Verify sender email addresses carefully</li>
           <li>Hover over links to see the actual destination URL</li>
           <li>Be suspicious of unexpected attachments</li>
           <li>Never share credentials via email or chat</li>
-          <li>Report suspicious messages to security@company.local</li>
+          <li>Report suspicious messages through your organisation's approved channel</li>
         </ul>
       </div>
-    </div>
-    {% else %}
-    <div class="inbox-container">
-      <p style="color:#7ca8c9;margin-bottom:16px;">You have {{ traps|length }} pending messages:</p>
-      {% for trap in traps %}
-      <form method="POST" action="/trigger" style="margin:0;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <input type="hidden" name="trap_id" value="{{ trap.id }}" />
-        <button type="submit" style="background:none;border:none;width:100%;text-align:left;padding:0;cursor:pointer;">
-          <div class="email-item">
-            <div class="email-header">
-              <div>
-                <div class="email-from">{{ trap.sender or 'Company Admin' }}</div>
-                <div class="email-subject">{{ trap.label }}</div>
-                <div class="email-preview">{{ trap.preview or 'Important message - Action required' }}</div>
-              </div>
-              <div class="email-time">Now</div>
-            </div>
-            <div class="attachment">📎 Attachment or Link</div>
-          </div>
-        </button>
-      </form>
-      {% endfor %}
-    </div>
-    <div style="margin-top:20px;padding:16px;background:rgba(255,255,255,.04);border-radius:12px;color:#8da8c3;font-size:.9rem;">
-      <strong>Inbox Help:</strong> This is a controlled security-awareness simulation. Your interaction is recorded as a training signal only. Never enter a real password, authentication code, or personal information.
     </div>
     {% endif %}
   </div>
