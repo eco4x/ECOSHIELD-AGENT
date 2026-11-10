@@ -139,6 +139,12 @@ class AssessmentWorkflowTests(unittest.TestCase):
             self.conn, "Baseline", "Finance", "phishing_link",
             baseline_time, "Test Admin", "UTC"
         )
+        activate_due_campaigns(self.conn, _utc_now() + timedelta(minutes=2))
+        baseline_assignment = self.conn.execute(
+            "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
+            (baseline_id,),
+        ).fetchone()[0]
+        record_interaction(self.conn, baseline_assignment, "Test Employee", "clicked")
         with self.assertRaises(ValueError):
             create_campaign(
                 self.conn, "Invalid retest", "Finance", "urgent_payment",
