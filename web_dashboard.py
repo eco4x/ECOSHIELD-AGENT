@@ -170,6 +170,9 @@ def dashboard():
     assignments = list_employee_assignments(assessment_conn, session.get('user_name')) if get_current_user() == 'employee' else []
     assessment_conn.close()
     profiles = get_profiles()
+    team_member_count = len(profiles)
+    completed_assessments = sum(campaign.get('completed_count', 0) or 0 for campaign in campaigns)
+    completed_learning = sum(campaign.get('learning_completed_count', 0) or 0 for campaign in campaigns)
     events = get_latest_events()
     agent_alerts = get_agent_alerts()
     notice_id = request.args.get('notice_id')
@@ -205,6 +208,9 @@ def dashboard():
         agent_alerts=agent_alerts,
         campaigns=campaigns,
         assignments=assignments,
+        team_member_count=team_member_count,
+        completed_assessments=completed_assessments,
+        completed_learning=completed_learning,
         scenario_options=scenario_options()
     )
 
@@ -378,10 +384,10 @@ ADMIN_PAGE = """
       </div>
     </div>
     <div class="card metrics">
-      <div class="metric"><strong>{{ active_events }}</strong><span>Active demo events</span></div>
-      <div class="metric"><strong>{{ campaigns|length }}</strong><span>Campaigns</span></div>
-      <div class="metric"><strong>{{ review_count }}</strong><span>Profiles needing review</span></div>
-      <div class="metric"><strong>{{ event_count }}</strong><span>Total events</span></div>
+      <div class="metric"><strong>{{ campaigns|length }}</strong><span>Assessment campaigns</span></div>
+      <div class="metric"><strong>{{ team_member_count }}</strong><span>Team members</span></div>
+      <div class="metric"><strong>{{ completed_assessments }}</strong><span>Responses recorded</span></div>
+      <div class="metric"><strong>{{ completed_learning }}</strong><span>Lessons completed</span></div>
     </div>
     <div class="card">
       <h2>Campaign planner</h2>
@@ -803,7 +809,7 @@ EVENT_TEMPLATES = {
     "Phishing Link Interaction": "A controlled phishing link interaction was recorded. No credentials were requested or collected.",
     "Phishing Click": "A user interacted with a simulated HR-style link. No real session was exposed.",
     "Password Entry": "A user reached a simulated maintenance page. No password field or credential collection was used.",
-    "Suspicious Access": "An exec-style phishing page triggered a high-risk access event.",
+    "Suspicious Access": "An executive-impersonation simulation generated a training signal.",
     "Suspicious Link": "A policy update lure generated anomalous user behavior.",
     "Credential Replay": "A simulated suspicious-access signal was recorded; no credentials were collected or replayed.",
 }
@@ -992,7 +998,7 @@ def run_rule_watcher(trap):
     reason = None
     severity = 'LOW'
     
-    # Multiple incidents = high risk pattern
+    # Repeated simulated interactions may indicate a learning need
     if event_count >= 3:
         reason = f"Repeated simulated interactions were recorded ({event_count} events). Review the pattern privately and offer relevant guidance."
         severity = 'HIGH'
@@ -1001,7 +1007,7 @@ def run_rule_watcher(trap):
     # High training indicator threshold
     if risk_score >= 50 and current_status == 'Needs Review':
         reason = f"The training indicator reached the review threshold ({risk_score} points). This is not evidence of account compromise; review the employee's learning needs."
-        severity = 'CRITICAL'
+        severity = 'HIGH'
         action = 'REVIEW_TRAINING_INDICATOR'
     
     # Medium risk pattern
