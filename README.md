@@ -19,7 +19,7 @@ The product direction and MVP acceptance criteria are documented in [docs/ECOSHI
 
 The repository currently contains:
 
-- `web_dashboard.py` — Flask dashboard, demo login, event feed, employee profiles, basic campaign planner, employee assessment/learning pages, and rule-based response workflow.
+- `web_dashboard.py` — Flask readiness dashboard, role-based demo login, controlled simulation feed, employee profiles, campaign planner, employee assessment/learning pages, and rule-based training recommendations.
 - `assessment_engine.py` — SQLite-backed campaign scheduling, team assignments, safe interaction recording, and scenario-specific learning recommendations.
 - `trap.py` — controlled department-level simulation endpoint. It does not request real employee passwords.
 - `vault.py` — SQLite employee profile and risk-score setup.
@@ -36,7 +36,7 @@ The repository currently contains:
 - Make risk indicators explainable and avoid treating one interaction as proof of compromise.
 - Do not shame employees or expose public employee rankings.
 - Clearly distinguish simulated response actions from actions actually carried out by an integration.
-- The current event watcher is rule-based, not an AI detection engine.
+- The current event watcher and analysis endpoint are rule-based, not AI detection engines.
 - The current prototype does not perform verified network isolation or real identity-provider account lockout.
 
 ## Dashboard security configuration
@@ -51,7 +51,7 @@ The dashboard fails closed unless these server-side environment variables are co
 
 Use unique private values. Never commit secrets or expose them in client-side code.
 
-The dashboard uses signed sessions with HttpOnly and SameSite=Lax cookies, a 30-minute session lifetime, CSRF protection on POST forms, a five-attempt-per-minute login limit, security response headers, and role checks on administrative routes. Sensitive dashboard APIs and event exports require an administrator session. The built-in server runs with debug disabled and binds to localhost by default.
+The dashboard uses signed sessions with HttpOnly and SameSite=Lax cookies, a 30-minute session lifetime, CSRF protection on POST forms, a five-attempt-per-minute login limit, security response headers, and role checks on administrative routes. Sensitive dashboard APIs and event exports require an administrator session. The built-in server runs with debug disabled and binds to localhost by default. Local SQLite data is stored in `ecoshield.db` by default; set `ECOSHIELD_DB_PATH` to choose a persistent database path. Database files are excluded from source control.
 
 For local HTTP development only, set `ECOSHIELD_COOKIE_SECURE=false`. Leave secure cookies enabled behind HTTPS. The built-in Flask server is for local testing only; use a production WSGI server behind HTTPS for deployment.
 
