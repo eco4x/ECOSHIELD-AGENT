@@ -88,7 +88,7 @@ A credible first demonstration should allow us to:
 5. Record the outcome against the correct campaign and employee.
 6. Recommend and display a relevant learning item.
 7. Record learning completion and a follow-up assessment.
-8. Show a simple team report comparing the initial assessment with the retest.
+8. Show an aggregate campaign report comparing the initial assessment with a linked retest, including click rate, reporting rate, and learning completion changes.
 9. Demonstrate role restrictions and explain which actions are simulated.
 
 If a feature is not implemented end-to-end, the interface and pitch must label it as planned or simulated.
@@ -119,6 +119,6 @@ If a feature is not implemented end-to-end, the interface and pitch must label i
 
 The current branch contains a Flask dashboard, department-level simulation controls, SQLite employee/event records, scheduled campaigns, per-employee assignments, response recording, targeted lesson assignment, learning completion, and a separate polling scheduler worker. These features are implemented in the prototype but must still be validated end-to-end.
 
-The employee login is still configured for one demo employee rather than supporting multiple independently authenticated employees. The prototype does not send real campaign emails, and it does not yet provide a before-and-after retest comparison or a complete team-level readiness report. The simulation library and seeded employee records are synthetic.
+The employee login is still configured for one demo employee rather than supporting multiple independently authenticated employees. The prototype does not send real campaign emails or support multiple independently authenticated employee accounts. It now supports aggregate reports and baseline-linked retest comparisons for matching audience/scenario campaigns, but it is not yet a complete multi-tenant team-readiness reporting platform. The simulation library and seeded employee records are synthetic.
 
 The event watcher and analysis endpoint are rule-based. Training indicators are not evidence of compromise. No real account lockout, device isolation, access revocation, or external incident escalation is performed. The Render-hosted demo is not automatically updated by changes on this development branch.
