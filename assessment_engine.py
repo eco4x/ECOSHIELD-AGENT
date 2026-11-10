@@ -69,7 +69,8 @@ def initialize_assessment_schema(conn):
             scheduled_at TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'scheduled',
             created_at TEXT NOT NULL,
-            created_by TEXT NOT NULL
+            created_by TEXT NOT NULL,
+            retest_of_campaign_id INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS assessment_assignments (
@@ -97,6 +98,11 @@ def initialize_assessment_schema(conn):
         );
         """
     )
+    campaign_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(assessment_campaigns)").fetchall()
+    }
+    if "retest_of_campaign_id" not in campaign_columns:
+        conn.execute("ALTER TABLE assessment_campaigns ADD COLUMN retest_of_campaign_id INTEGER")
 
 
 def _utc_now():
@@ -119,7 +125,7 @@ def _parse_schedule(value, timezone_name):
     return scheduled.astimezone(timezone.utc)
 
 
-def create_campaign(conn, name, department, scenario_key, scheduled_at, created_by, timezone_name="Africa/Kampala"):
+def create_campaign(conn, name, department, scenario_key, scheduled_at, created_by, timezone_name="Africa/Kampala", retest_of_campaign_id=None):
     name = (name or "").strip()
     department = (department or "").strip()
     scenario_key = (scenario_key or "").strip()
@@ -133,6 +139,22 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
     if not created_by:
         raise ValueError("A signed-in administrator is required.")
 
+    if retest_of_campaign_id not in (None, ""):
+        try:
+            retest_of_campaign_id = int(retest_of_campaign_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Choose a valid baseline campaign.") from exc
+        baseline = conn.execute(
+            "SELECT department, scenario_key, status FROM assessment_campaigns WHERE id = ?",
+            (retest_of_campaign_id,),
+        ).fetchone()
+        if baseline is None or baseline["status"] != "completed":
+            raise ValueError("A retest must reference an existing completed campaign.")
+        if baseline["department"] != department or baseline["scenario_key"] != scenario_key:
+            raise ValueError("A retest must use the same audience and scenario as its baseline.")
+    else:
+        retest_of_campaign_id = None
+
     scheduled_utc = _parse_schedule(scheduled_at, timezone_name)
     now = _utc_now()
     if scheduled_utc < now.replace(second=0, microsecond=0):
@@ -141,8 +163,8 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
     cursor = conn.execute(
         """
         INSERT INTO assessment_campaigns
-            (name, department, scenario_key, scheduled_at, status, created_at, created_by)
-        VALUES (?, ?, ?, ?, 'scheduled', ?, ?)
+            (name, department, scenario_key, scheduled_at, status, created_at, created_by, retest_of_campaign_id)
+        VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)
         """,
         (
             name,
@@ -151,6 +173,7 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
             scheduled_utc.isoformat(timespec="seconds"),
             now.isoformat(timespec="seconds"),
             created_by,
+            retest_of_campaign_id,
         ),
     )
     conn.commit()
@@ -215,9 +238,14 @@ def list_campaigns(conn, limit=20):
         """
         SELECT c.*,
                COUNT(a.id) AS assigned_count,
-               SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS completed_count
+               COALESCE(SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'clicked' THEN 1 ELSE 0 END), 0) AS clicked_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'reported' THEN 1 ELSE 0 END), 0) AS reported_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'ignored' THEN 1 ELSE 0 END), 0) AS ignored_count,
+               COALESCE(SUM(CASE WHEN l.status = 'completed' THEN 1 ELSE 0 END), 0) AS learning_completed_count
         FROM assessment_campaigns c
         LEFT JOIN assessment_assignments a ON a.campaign_id = c.id
+        LEFT JOIN learning_progress l ON l.assignment_id = a.id
         GROUP BY c.id
         ORDER BY c.scheduled_at DESC
         LIMIT ?
@@ -350,3 +378,63 @@ def complete_learning(conn, assignment_id, employee_name):
     if cursor.rowcount == 0:
         raise LookupError("Learning item not found or already completed.")
     conn.commit()
+
+
+
+def _campaign_metrics(conn, campaign_id):
+    campaign = conn.execute(
+        "SELECT * FROM assessment_campaigns WHERE id = ?",
+        (campaign_id,),
+    ).fetchone()
+    if campaign is None:
+        raise LookupError("Campaign not found.")
+
+    row = conn.execute(
+        """
+        SELECT COUNT(a.id) AS assigned_count,
+               COALESCE(SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'clicked' THEN 1 ELSE 0 END), 0) AS clicked_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'reported' THEN 1 ELSE 0 END), 0) AS reported_count,
+               COALESCE(SUM(CASE WHEN a.interaction = 'ignored' THEN 1 ELSE 0 END), 0) AS ignored_count,
+               COALESCE(SUM(CASE WHEN l.status = 'completed' THEN 1 ELSE 0 END), 0) AS learning_completed_count,
+               COUNT(l.id) AS learning_assigned_count
+        FROM assessment_assignments a
+        LEFT JOIN learning_progress l ON l.assignment_id = a.id
+        WHERE a.campaign_id = ?
+        """,
+        (campaign_id,),
+    ).fetchone()
+    metrics = dict(row)
+    denominator = metrics["assigned_count"]
+    learning_denominator = metrics["learning_assigned_count"]
+    metrics["click_rate"] = round(metrics["clicked_count"] * 100 / denominator, 1) if denominator else 0.0
+    metrics["report_rate"] = round(metrics["reported_count"] * 100 / denominator, 1) if denominator else 0.0
+    metrics["learning_completion_rate"] = (
+        round(metrics["learning_completed_count"] * 100 / learning_denominator, 1)
+        if learning_denominator else 0.0
+    )
+    return dict(campaign), metrics
+
+
+def campaign_report(conn, campaign_id):
+    """Return aggregate campaign outcomes and, for a retest, baseline deltas."""
+    campaign, metrics = _campaign_metrics(conn, campaign_id)
+    baseline_metrics = None
+    comparison = None
+    baseline_id = campaign.get("retest_of_campaign_id")
+    if baseline_id:
+        baseline, baseline_metrics = _campaign_metrics(conn, baseline_id)
+        comparison = {
+            "baseline_campaign_name": baseline["name"],
+            "click_rate_change_pp": round(metrics["click_rate"] - baseline_metrics["click_rate"], 1),
+            "report_rate_change_pp": round(metrics["report_rate"] - baseline_metrics["report_rate"], 1),
+            "learning_completion_change_pp": round(
+                metrics["learning_completion_rate"] - baseline_metrics["learning_completion_rate"], 1
+            ),
+        }
+    return {
+        "campaign": campaign,
+        "metrics": metrics,
+        "baseline_metrics": baseline_metrics,
+        "comparison": comparison,
+    }
