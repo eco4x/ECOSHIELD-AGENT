@@ -126,6 +126,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
         complete_learning(self.conn, retest_assignment, "Test Employee")
 
         report = campaign_report(self.conn, retest_id)
+        self.assertEqual(report["metrics"]["response_rate"], 100.0)
         self.assertEqual(report["metrics"]["click_rate"], 0.0)
         self.assertEqual(report["metrics"]["report_rate"], 100.0)
         self.assertEqual(report["metrics"]["learning_completion_rate"], 100.0)
