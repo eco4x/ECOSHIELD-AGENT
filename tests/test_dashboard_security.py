@@ -57,10 +57,21 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertEqual(allowed.status_code, 200)
         self.assertIsInstance(allowed.get_json(), list)
 
+    def test_employee_cannot_view_campaign_reports(self):
+        self.login("employee@example.test", "test-employee-password-123")
+        response = self.client.get("/campaigns/1/report")
+        self.assertEqual(response.status_code, 403)
+
+    def test_legacy_analysis_path_remains_available(self):
+        self.login("admin@example.test", "test-admin-password-123")
+        response = self.client.post("/api/ai/analyze", json={"events": []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["analysis_type"], "rule_based_training_signal")
+
     def test_analysis_endpoint_is_explicitly_rule_based_and_non_containment(self):
         self.login("admin@example.test", "test-admin-password-123")
         response = self.client.post(
-            "/api/ai/analyze",
+            "/api/readiness/analyze",
             json={"events": [{"impact": 18, "event_type": "Simulated phishing", "user": "Demo Employee"}]},
         )
         self.assertEqual(response.status_code, 200)
