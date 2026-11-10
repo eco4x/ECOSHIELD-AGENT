@@ -349,7 +349,7 @@ ADMIN_PAGE = """
     {% if agent_alerts %}
     <div class="card">
       <h2>Training Recommendations</h2>
-      <p style="color:#7ca8c9;margin:8px 0 0;">Transparent demo rules evaluate recorded simulation events and suggest follow-up actions. This prototype does not perform real account lockout, network isolation, or external escalation.</p>
+      <p style="color:#7ca8c9;margin:8px 0 0;">Transparent rules review simulated training signals and suggest follow-up learning. No account lockout, network isolation, or external escalation is performed.</p>
       {% for alert in agent_alerts %}
       <div class="event-item" style="border-left: 4px solid {% if alert.severity == 'CRITICAL' %}#ff6c6c{% elif alert.severity == 'HIGH' %}#f7c74e{% else %}#5ce2a3{% endif %};">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
@@ -362,7 +362,7 @@ ADMIN_PAGE = """
         <p style="margin:12px 0;color:#c7dfea;"><strong>Action:</strong> {{ alert.action }}</p>
         <p style="margin:12px 0;color:#a7cfe5;"><strong>Analysis:</strong> {{ alert.reason }}</p>
         <div style="margin-top:12px;padding:12px;background:rgba(255,255,255,.03);border-radius:12px;color:#8da8c3;font-size:.95rem;">
-          <strong>Response note:</strong> {{ alert.isolation_details }}<br/>
+          <strong>Execution status:</strong> {{ alert.isolation_details }}<br/>
           <strong>Status:</strong> {{ alert.escalation_status }}
         </div>
       </div>
@@ -377,8 +377,8 @@ ADMIN_PAGE = """
         </div>
         <form method="POST" action="/admin/actions" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button name="action" value="run_sentinel">Run Sentinel</button>
-          <button name="action" value="export_events">Export Logs</button>
+          <button name="action" value="run_sentinel">Close demo events</button>
+          <button name="action" value="export_events">Export simulation records</button>
         </form>
       </div>
       {% for event in events %}
@@ -388,7 +388,7 @@ ADMIN_PAGE = """
             <strong>{{ event.title }}</strong>
             <p style="margin:8px 0 0;color:#7ca8c9;">{{ event.user }} · {{ event.timestamp }}</p>
           </div>
-          <span class="pill {{ event.level }}">{{ event.level|upper }}</span>
+          <span class="pill {{ event.level }}">{{ event.level|upper }} training signal</span>
         </div>
         <p style="margin:14px 0 0;color:#c7dfea;">{{ event.details }}</p>
         <div style="margin-top:14px;color:#8da8c3;font-size:.95rem;display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:12px;">
@@ -414,7 +414,7 @@ EMPLOYEE_PAGE = """
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Email Inbox</title>
+  <title>Employee Security Learning</title>
   <style>
     body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at top left, rgba(57,213,224,.16), transparent 30%), linear-gradient(180deg, #02101d 0%, #061b2d 100%);color:#e9f7ff;}
     .page{padding:24px;max-width:1000px;margin:0 auto;}
@@ -430,10 +430,10 @@ EMPLOYEE_PAGE = """
     .email-time{color:#7ca8c9;font-size:.85rem;}
     .email-preview{color:#a7cfe5;font-size:.9rem;margin:12px 0;}
     .attachment{display:inline-block;background:rgba(57,213,224,.12);color:#39d5e0;padding:8px 12px;border-radius:8px;font-size:.85rem;font-weight:600;margin-top:10px;}
-    .locked-notice{background:rgba(255,108,108,.12);border:2px solid rgba(255,108,108,.3);border-radius:16px;padding:24px;margin-bottom:24px;color:#ff8b8b;}
-    .locked-notice h2{margin-top:0;color:#ff6c6c;}
-    .locked-notice p{line-height:1.6;margin:8px 0;}
-    .locked-notice strong{color:#ff9999;}
+    .training-notice{background:rgba(255,108,108,.12);border:2px solid rgba(255,108,108,.3);border-radius:16px;padding:24px;margin-bottom:24px;color:#ff8b8b;}
+    .training-notice h2{margin-top:0;color:#ff6c6c;}
+    .training-notice p{line-height:1.6;margin:8px 0;}
+    .training-notice strong{color:#ff9999;}
     .awareness-box{background:rgba(255,255,255,.05);border-left:4px solid #39d5e0;border-radius:12px;padding:16px;margin-top:16px;color:#c7dfea;}
     .awareness-box strong{color:#39d5e0;}
     .status-chip{display:inline-block;padding:8px 12px;border-radius:999px;font-size:.85rem;font-weight:700;background:rgba(255,108,108,.14);color:#ff6c6c;}
@@ -443,7 +443,7 @@ EMPLOYEE_PAGE = """
   <div class="page">
     <div class="header">
       <div>
-        <h1>📧 Email Inbox</h1>
+        <h1>Security Learning</h1>
         <p style="color:#7ca8c9;margin:8px 0 0;">{{ user_name }} · {{ department }}</p>
       </div>
       <form method="POST" action="/logout" style="display:inline;margin:0;">
@@ -494,11 +494,11 @@ EMPLOYEE_PAGE = """
     </div>
 
     {% if user_profile and user_profile.status in ['Needs Review', 'Training Recommended'] %}
-    <div class="locked-notice">
+    <div class="training-notice">
       <h2>⚠️ Additional Training Guidance Recommended</h2>
       <p><strong>Demo profile status:</strong> <span class="status-chip">HIGH RISK</span></p>
       <p><strong>Training indicator:</strong> {{ user_profile.risk_score }} points (review threshold reached)</p>
-      <p><strong>Reason:</strong> Your training risk indicator crossed the configured threshold after a controlled simulation. No real company account has been locked by this prototype.</p>
+      <p><strong>Reason:</strong> Your training indicator reached the configured review threshold after a controlled simulation. No real company account has been locked by this prototype.</p>
       <p><strong>What Happened:</strong> The exercise recorded an interaction with a simulated security scenario. It did not capture real credentials or establish access to company systems.</p>
       <p><strong>Next Steps:</strong></p>
       <ul style="margin:8px 0;padding-left:20px;">
@@ -557,7 +557,7 @@ MAIN_PAGE = """
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ECOSHIELD SOC Dashboard</title>
+<title>ECOSHIELD Security Readiness</title>
 <style>
 :root {
   --bg: #041017;
@@ -622,7 +622,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
       <p class="intro">A lightweight small-team prototype for controlled security simulations, explainable risk signals, employee learning, and follow-up review.</p>
     </div>
     <div class="card" style="min-width:280px;">
-      <div class="metric"><strong>{{active_events}}</strong><span>Active Traps</span></div>
+      <div class="metric"><strong>{{active_events}}</strong><span>Active simulations</span></div>
       <div class="metric"><strong>{{risk_score}}</strong><span>Readiness indicator</span></div>
       <div class="metric"><strong>{{review_count}}</strong><span>Profiles needing review</span></div>
     </div>
@@ -649,7 +649,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     </section>
 
     <section class="card span6">
-      <h2>Event Feed</h2>
+      <h2>Simulation Activity</h2>
       <div class="event-list">
         {% for event in events %}
           <article class="event-item">
@@ -682,11 +682,11 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     </section>
 
     <section class="card span4">
-      <h2>Incident Summary</h2>
+      <h2>Readiness Summary</h2>
       <div class="mini-grid">
-        <div class="mini-card"><strong>{{incident_summary.highest_risk}}</strong><div style="color:var(--muted);margin-top:8px;">Highest risk</div></div>
-        <div class="mini-card"><strong>{{incident_summary.recent_user}}</strong><div style="color:var(--muted);margin-top:8px;">Latest target</div></div>
-        <div class="mini-card"><strong>{{incident_summary.actions_taken}}</strong><div style="color:var(--muted);margin-top:8px;">Auto responses</div></div>
+        <div class="mini-card"><strong>{{incident_summary.highest_risk}}</strong><div style="color:var(--muted);margin-top:8px;">Highest training indicator</div></div>
+        <div class="mini-card"><strong>{{incident_summary.recent_user}}</strong><div style="color:var(--muted);margin-top:8px;">Recent participant</div></div>
+        <div class="mini-card"><strong>{{incident_summary.actions_taken}}</strong><div style="color:var(--muted);margin-top:8px;">Training recommendations</div></div>
       </div>
     </section>
 
@@ -718,7 +718,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
 <div class="modal-overlay">
   <div class="modal-content">
     <h3>Report Submitted</h3>
-    <p>Your incident report has been recorded. The SOC team will review it in this demo.</p>
+    <p>Your incident report has been recorded. The administrator can review it in this demo.</p>
     <div class="modal-actions">
       <a href="/">Close</a>
     </div>
@@ -935,25 +935,25 @@ def run_rule_watcher(trap):
     if event_count >= 3:
         reason = f"Repeated simulated interactions were recorded ({event_count} events). Review the pattern privately and offer relevant guidance."
         severity = 'HIGH'
-        action = 'ALERT_ESCALATE'
+        action = 'REVIEW_REPEATED_TRAINING_SIGNALS'
     
-    # Combined high risk + compromised = critical
+    # High training indicator threshold
     if risk_score >= 50 and current_status == 'Needs Review':
         reason = f"The training indicator reached the review threshold ({risk_score} points). This is not evidence of account compromise; review the employee's learning needs."
         severity = 'CRITICAL'
-        action = 'ESCALATE_INCIDENT'
+        action = 'REVIEW_TRAINING_INDICATOR'
     
     # Medium risk pattern
     elif risk_score >= 35 and event_count >= 2:
         reason = f"Repeated training signals indicate a possible learning gap (indicator: {risk_score}). Recommend targeted security awareness guidance."
         severity = 'MEDIUM'
-        action = 'ALERT_SOC'
+        action = 'ASSIGN_TARGETED_LEARNING'
     
     # Single high-impact incident
     elif trap['impact'] >= 15 and event_count == 1:
         reason = f"A simulated scenario recorded a training signal: {trap['event_type']}. Recommend reviewing the relevant awareness lesson."
         severity = 'MEDIUM'
-        action = 'ALERT_SOC'
+        action = 'ASSIGN_TARGETED_LEARNING'
     
     # Create agent action record if action triggered
     if action:
