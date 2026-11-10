@@ -1,0 +1,26 @@
+name: ECOSHIELD checks
+
+on:
+  push:
+    branches:
+      - security/harden-trap-capture
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python modules
+        run: python -m compileall -q .
+      - name: Run assessment workflow tests
+        run: python -m unittest discover -s tests -v
