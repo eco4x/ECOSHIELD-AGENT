@@ -44,7 +44,7 @@ CREDENTIALS = {
     'admin': {
         'email': required_credentials['ECOSHIELD_ADMIN_EMAIL'],
         'password': required_credentials['ECOSHIELD_ADMIN_PASSWORD'],
-        'display_name': 'SOC Admin',
+        'display_name': 'Readiness Admin',
         'department': 'Security Operations'
     },
     'employee': {
@@ -310,7 +310,7 @@ ADMIN_PAGE = """
   <div class="page">
     <div class="card header">
       <div>
-        <h1>Admin SOC Console</h1>
+        <h1>Security Readiness Workspace</h1>
         <p style="color:#7ca8c9;margin:8px 0 0;">Logged in as {{ user_name }} · {{ department }}</p>
       </div>
       <div class="button-row">
@@ -321,7 +321,7 @@ ADMIN_PAGE = """
     <div class="card metrics">
       <div class="metric"><strong>{{ active_events }}</strong><span>Active demo events</span></div>
       <div class="metric"><strong>{{ campaigns|length }}</strong><span>Campaigns</span></div>
-      <div class="metric"><strong>{{ locked_count }}</strong><span>High-risk demo profiles</span></div>
+      <div class="metric"><strong>{{ locked_count }}</strong><span>Profiles needing review</span></div>
       <div class="metric"><strong>{{ event_count }}</strong><span>Total events</span></div>
     </div>
     <div class="card">
@@ -348,7 +348,7 @@ ADMIN_PAGE = """
     </div>
     {% if agent_alerts %}
     <div class="card">
-      <h2>Rule-Based Security Watcher — Alerts</h2>
+      <h2>Rule-Based Learning Recommendations</h2>
       <p style="color:#7ca8c9;margin:8px 0 0;">Transparent demo rules evaluate recorded simulation events and suggest follow-up actions. This prototype does not perform real account lockout, network isolation, or external escalation.</p>
       {% for alert in agent_alerts %}
       <div class="event-item" style="border-left: 4px solid {% if alert.severity == 'CRITICAL' %}#ff6c6c{% elif alert.severity == 'HIGH' %}#f7c74e{% else %}#5ce2a3{% endif %};">
@@ -372,7 +372,7 @@ ADMIN_PAGE = """
     <div class="card">
       <div class="header">
         <div>
-          <h2>Phish Investigation Feed</h2>
+          <h2>Simulation Activity</h2>
           <p style="color:#7ca8c9;margin:8px 0 0;">Review the controlled simulation, affected demo profile, and recorded status.</p>
         </div>
         <form method="POST" action="/admin/actions" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
@@ -493,7 +493,7 @@ EMPLOYEE_PAGE = """
       {% endfor %}
     </div>
 
-    {% if user_profile and user_profile.status == 'LOCKED' %}
+    {% if user_profile and user_profile.status in ['Needs Review', 'Training Recommended'] %}
     <div class="locked-notice">
       <h2>⚠️ Training Risk Threshold Reached — Demo Status</h2>
       <p><strong>Demo profile status:</strong> <span class="status-chip">HIGH RISK</span></p>
@@ -624,14 +624,14 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     <div class="card" style="min-width:280px;">
       <div class="metric"><strong>{{active_events}}</strong><span>Active Traps</span></div>
       <div class="metric"><strong>{{risk_score}}</strong><span>Overall Risk</span></div>
-      <div class="metric"><strong>{{locked_count}}</strong><span>Locked Accounts</span></div>
+      <div class="metric"><strong>{{locked_count}}</strong><span>Profiles needing review</span></div>
     </div>
   </header>
 
   <div class="grid">
     <section class="card span6">
-      <h2>Trap Simulation</h2>
-      <p style="color:var(--muted);margin-bottom:18px;">Trigger a demo phishing trap and watch how the system elevates risk, flags the user, and issues automated sentinel actions.</p>
+      <h2>Controlled Security Simulations</h2>
+      <p style="color:var(--muted);margin-bottom:18px;">Run a controlled training scenario, record the response, and identify where employees may need guidance.</p>
       <div class="button-row">
         {% for trap in traps %}
           <form method="POST" action="/trigger" style="margin:0;">
@@ -750,8 +750,11 @@ EVENT_TEMPLATES = {
 STATUS_COLORS = [(0, "low"), (35, "mid"), (50, "high")]
 
 
+DB_PATH = os.environ.get('ECOSHIELD_DB_PATH', 'ecoshield.db')
+
+
 def get_db_connection():
-    conn = sqlite3.connect('ecoshield.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -850,7 +853,7 @@ def current_risk_score():
 def calculate_locked_count():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM employees WHERE status = 'LOCKED'")
+    cur.execute("SELECT COUNT(*) FROM employees WHERE status = 'Needs Review'")
     count = cur.fetchone()[0]
     conn.close()
     return count
@@ -888,16 +891,16 @@ def update_risk_for_user(trap):
 
     new_score = row['risk_score'] + trap['impact']
     new_status = row['status']
-    if new_score >= 50 and row['status'] != 'LOCKED':
-        new_status = 'LOCKED'
+    if new_score >= 50 and row['status'] != 'Needs Review':
+        new_status = 'Needs Review'
     elif new_score >= 35 and row['status'] == 'Secure':
-        new_status = 'Compromised'
+        new_status = 'Training Recommended'
     cur.execute('UPDATE employees SET risk_score = ?, status = ? WHERE id = ?', (new_score, new_status, row['id']))
     conn.commit()
     conn.close()
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM employees WHERE status = 'LOCKED'")
+    cur.execute("SELECT COUNT(*) FROM employees WHERE status = 'Needs Review'")
     count = cur.fetchone()[0]
     conn.close()
     return count
@@ -930,32 +933,32 @@ def run_ai_agent_watcher(trap):
     
     # Multiple incidents = high risk pattern
     if event_count >= 3:
-        reason = f"Repeated phishing engagement detected ({event_count} incidents in session). Pattern suggests social engineering susceptibility."
+        reason = f"Repeated simulated interactions were recorded ({event_count} events). Review the pattern privately and offer relevant guidance."
         severity = 'HIGH'
         action = 'ALERT_ESCALATE'
     
     # Combined high risk + compromised = critical
-    if risk_score >= 50 and current_status == 'LOCKED':
-        reason = f"Critical risk threshold exceeded. Risk score: {risk_score} pts. Account locked to prevent lateral movement. Credentials compromised across multiple attack vectors."
+    if risk_score >= 50 and current_status == 'Needs Review':
+        reason = f"The training indicator reached the review threshold ({risk_score} points). This is not evidence of account compromise; review the employee's learning needs."
         severity = 'CRITICAL'
         action = 'ESCALATE_INCIDENT'
     
     # Medium risk pattern
     elif risk_score >= 35 and event_count >= 2:
-        reason = f"Suspicious pattern detected. Risk score: {risk_score} pts. Multiple trap engagements indicate training gap. Recommend enhanced security awareness."
+        reason = f"Repeated training signals indicate a possible learning gap (indicator: {risk_score}). Recommend targeted security awareness guidance."
         severity = 'MEDIUM'
         action = 'ALERT_SOC'
     
     # Single high-impact incident
     elif trap['impact'] >= 15 and event_count == 1:
-        reason = f"High-impact incident detected: {trap['event_type']}. Immediate security awareness intervention recommended."
+        reason = f"A simulated scenario recorded a training signal: {trap['event_type']}. Recommend reviewing the relevant awareness lesson."
         severity = 'MEDIUM'
         action = 'ALERT_SOC'
     
     # Create agent action record if action triggered
     if action:
         source = SOURCE_INFOS.get(trap['user'], {'network': 'Unclassified'})
-        isolation_details = 'No real isolation or access revocation performed; administrator review recommended.'
+        isolation_details = 'No account lockout, device isolation, or access revocation was performed; this is a training recommendation only.'
         escalation_status = 'SIMULATED_RECOMMENDATION_ONLY'
         
         cur.execute('''
@@ -1039,7 +1042,7 @@ def process_sentinel():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("UPDATE events SET status = 'completed' WHERE status = 'active'")
-    cur.execute("UPDATE employees SET status = 'LOCKED' WHERE risk_score >= 50")
+    cur.execute("UPDATE employees SET status = 'Needs Review' WHERE risk_score >= 50")
     conn.commit()
     conn.close()
 
@@ -1180,19 +1183,33 @@ def api_profiles():
 @app.route('/api/ai/analyze', methods=['POST'])
 @admin_required
 def ai_analyze():
-    data = request.json or {}
+    """Legacy endpoint name; this is transparent rule-based training analysis, not AI."""
+    data = request.get_json(silent=True) or request.form
     events = data.get('events') or []
     if not events:
-        return jsonify({'summary': 'No events provided.'})
-    highest = max(events, key=lambda e: e.get('impact', 0))
-    severity = 'High' if highest.get('impact',0) >= 20 else 'Medium' if highest.get('impact',0) >= 10 else 'Low'
-    summary = f"Detected {len(events)} recent events. Highest-impact event: {highest.get('event_type')} targeting {highest.get('user')} (impact {highest.get('impact')}). Severity: {severity}."
+        return jsonify({
+            'analysis_type': 'rule_based_training_signal',
+            'summary': 'No simulation events were provided.',
+            'suggestions': [],
+            'real_containment_performed': False,
+        })
+    highest = max(events, key=lambda event: event.get('impact', 0))
+    summary = (
+        f"Reviewed {len(events)} supplied simulation event(s). The highest training-signal "
+        f"impact was {highest.get('impact', 0)} for {highest.get('event_type', 'a scenario')}. "
+        "This is an awareness indicator, not evidence of compromise."
+    )
     suggestions = [
-        'Investigate the highest-impact event and isolate the user session.',
-        'Force password reset for the affected account and monitor for lateral activity.',
-        'Review the phishing chain and block any malicious senders.'
+        'Review the interaction privately and non-punitively with the employee.',
+        'Assign the short learning item that matches the scenario.',
+        'Run a later controlled retest to check whether the behaviour improves.',
     ]
-    return jsonify({'summary': summary, 'suggestions': suggestions})
+    return jsonify({
+        'analysis_type': 'rule_based_training_signal',
+        'summary': summary,
+        'suggestions': suggestions,
+        'real_containment_performed': False,
+    })
 
 
 if __name__ == '__main__':
