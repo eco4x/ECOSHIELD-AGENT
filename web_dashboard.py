@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from assessment_engine import (
     initialize_assessment_schema, create_campaign, activate_due_campaigns,
     list_campaigns, list_employee_assignments, record_interaction,
-    complete_learning, scenario_options,
+    complete_learning, scenario_options, campaign_report,
 )
 app = Flask(__name__)
 secret_key = os.environ.get('ECOSHIELD_SECRET_KEY', '')
@@ -224,12 +224,71 @@ def campaign_create():
             request.form.get('scheduled_at', ''),
             session.get('user_name'),
             os.environ.get('ECOSHIELD_TIMEZONE', 'Africa/Kampala'),
+            request.form.get('retest_of_campaign_id') or None,
         )
     except ValueError as exc:
         conn.close()
         return str(exc), 400
     conn.close()
     return redirect(url_for('dashboard'))
+
+
+@app.route('/campaigns/<int:campaign_id>/report')
+@admin_required
+def campaign_report_view(campaign_id):
+    conn = get_db_connection()
+    try:
+        report = campaign_report(conn, campaign_id)
+    except LookupError:
+        conn.close()
+        return 'Campaign not found', 404
+    conn.close()
+    return render_template_string("""
+    <!doctype html>
+    <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Campaign readiness report · ECOSHIELD</title>
+    <style>
+      body{margin:0;padding:24px;background:#041017;color:#e9f7ff;font-family:Inter,system-ui,sans-serif}
+      main{max-width:900px;margin:0 auto}.card{background:#0f1f30;border:1px solid #26394b;border-radius:18px;padding:22px;margin:16px 0}
+      .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+      .metric{background:#162b40;padding:16px;border-radius:12px}.metric strong{display:block;font-size:1.6rem}
+      p,small{color:#a7cfe5;line-height:1.5}a{color:#39d5e0}
+      table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px;border-bottom:1px solid #26394b}
+    </style></head><body><main>
+      <p><a href="{{ url_for('dashboard') }}">← Back to dashboard</a></p>
+      <section class="card">
+        <h1>{{ report.campaign.name }}</h1>
+        <p>{{ report.campaign.department }} · {{ report.campaign.scenario_key }} · {{ report.campaign.status }}</p>
+        <p>This report uses aggregate training-simulation outcomes. It does not indicate compromise or measure real-world breach probability.</p>
+      </section>
+      <section class="card">
+        <h2>Campaign outcomes</h2>
+        <div class="metrics">
+          <div class="metric"><strong>{{ report.metrics.assigned_count }}</strong><small>Assigned</small></div>
+          <div class="metric"><strong>{{ report.metrics.completed_count }}</strong><small>Responses completed</small></div>
+          <div class="metric"><strong>{{ report.metrics.clicked_count }}</strong><small>Clicked</small></div>
+          <div class="metric"><strong>{{ report.metrics.reported_count }}</strong><small>Reported</small></div>
+          <div class="metric"><strong>{{ report.metrics.ignored_count }}</strong><small>Ignored</small></div>
+          <div class="metric"><strong>{{ report.metrics.learning_completion_rate }}%</strong><small>Learning completion</small></div>
+        </div>
+      </section>
+      {% if report.comparison %}
+      <section class="card">
+        <h2>Change since baseline</h2>
+        <p>Baseline: {{ report.comparison.baseline_campaign_name }}</p>
+        <table>
+          <tr><th>Measure</th><th>Baseline</th><th>Retest</th><th>Change</th></tr>
+          <tr><td>Click rate</td><td>{{ report.baseline_metrics.click_rate }}%</td><td>{{ report.metrics.click_rate }}%</td><td>{{ report.comparison.click_rate_change_pp }} percentage points</td></tr>
+          <tr><td>Report rate</td><td>{{ report.baseline_metrics.report_rate }}%</td><td>{{ report.metrics.report_rate }}%</td><td>{{ report.comparison.report_rate_change_pp }} percentage points</td></tr>
+          <tr><td>Learning completion</td><td>{{ report.baseline_metrics.learning_completion_rate }}%</td><td>{{ report.metrics.learning_completion_rate }}%</td><td>{{ report.comparison.learning_completion_change_pp }} percentage points</td></tr>
+        </table>
+        <p>A lower click rate and higher report rate can indicate improvement in this exercise. Interpret results in context and avoid using them to shame individual employees.</p>
+      </section>
+      {% else %}
+      <section class="card"><h2>Baseline campaign</h2><p>This campaign has no linked baseline. Complete it, then create a retest using the same audience and scenario to compare results.</p></section>
+      {% endif %}
+    </main></body></html>
+    """, report=report)
 
 
 @app.route('/assessments/<int:assignment_id>/respond', methods=['POST'])
@@ -332,6 +391,7 @@ ADMIN_PAGE = """
         <label>Campaign name<input name="name" maxlength="80" required placeholder="November security check" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
         <label>Audience<select name="department" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option>All teams</option><option>Finance</option><option>Human Resources</option><option>IT Operations</option></select></label>
         <label>Scenario<select name="scenario_key" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;">{% for scenario in scenario_options %}<option value="{{ scenario.key }}">{{ scenario.title }}</option>{% endfor %}</select></label>
+        <label>Retest baseline (optional)<select name="retest_of_campaign_id" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option value="">New baseline campaign</option>{% for campaign in campaigns %}{% if campaign.status == 'completed' %}<option value="{{ campaign.id }}">{{ campaign.name }} · {{ campaign.department }} · {{ campaign.scenario_key }}</option>{% endif %}{% endfor %}</select></label>
         <label>Schedule (Kampala time)<input type="datetime-local" name="scheduled_at" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
         <button type="submit">Schedule assessment</button>
       </form>
@@ -340,7 +400,8 @@ ADMIN_PAGE = """
         <div class="event-item">
           <strong>{{ campaign.name }}</strong> · {{ campaign.department }} · {{ campaign.scenario_key }}
           <p style="color:#7ca8c9;margin:8px 0;">{{ campaign.scheduled_at }} UTC · Status: {{ campaign.status }}</p>
-          <p style="color:#a7cfe5;margin:0;">Assigned: {{ campaign.assigned_count }} · Completed: {{ campaign.completed_count or 0 }}</p>
+          <p style="color:#a7cfe5;margin:0;">Assigned: {{ campaign.assigned_count }} · Responses: {{ campaign.completed_count or 0 }} · Clicked: {{ campaign.clicked_count }} · Reported: {{ campaign.reported_count }}</p>
+          <p style="margin:10px 0 0;"><a href="{{ url_for('campaign_report_view', campaign_id=campaign.id) }}" style="color:#39d5e0;">View readiness report →</a></p>
         </div>
       {% else %}
         <p style="color:#7ca8c9;">No campaigns scheduled yet.</p>
