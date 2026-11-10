@@ -95,10 +95,11 @@ If a feature is not implemented end-to-end, the interface and pitch must label i
 
 ## Delivery sequence
 
-### Before the first founder meeting
-- Stabilise the existing login, role checks, simulation and event records.
-- Remove misleading claims about credential capture, AI, network isolation, and real account locking.
-- Build one end-to-end campaign path with a small synthetic team.
+### Current MVP stabilisation
+- Keep the login, role checks, simulation and event records isolated from production employee data.
+- Use rule-based language consistently; do not present the watcher as AI.
+- Keep training indicators separate from compromise status, account lockout, or containment actions.
+- Validate the campaign-to-assignment-to-learning path with a small synthetic team.
 - Prepare a repeatable demo dataset and reset procedure.
 
 ### After the first meeting
@@ -116,8 +117,8 @@ If a feature is not implemented end-to-end, the interface and pitch must label i
 
 ## Current implementation caveats
 
-The existing repository contains a Flask dashboard, a department-level trap simulator, SQLite employee/event records, and rule-based risk/response logic. It is a prototype, not yet the complete campaign-to-learning product described above.
+The current branch contains a Flask dashboard, department-level simulation controls, SQLite employee/event records, scheduled campaigns, per-employee assignments, response recording, targeted lesson assignment, learning completion, and a separate polling scheduler worker. These features are implemented in the prototype but must still be validated end-to-end.
 
-The current employee login is configured for one demo employee, and the dashboard's simulation scenarios are static. Scheduled campaign management, per-employee campaign assignment, targeted learning progress, and measured retests still need to be implemented and tested.
+The employee login is still configured for one demo employee rather than supporting multiple independently authenticated employees. The prototype does not send real campaign emails, and it does not yet provide a before-and-after retest comparison or a complete team-level readiness report. The simulation library and seeded employee records are synthetic.
 
-The existing alert watcher is rule-based despite some UI labels saying "AI". Its isolation details are simulated text, not verified network isolation. These labels must be corrected before external demonstrations.
+The event watcher and analysis endpoint are rule-based. Training indicators are not evidence of compromise. No real account lockout, device isolation, access revocation, or external incident escalation is performed. The Render-hosted demo is not automatically updated by changes on this development branch.
