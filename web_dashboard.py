@@ -190,7 +190,7 @@ def dashboard():
     return render_template_string(template,
         active_events=sum(1 for e in events if e['status'] == 'active'),
         risk_score=current_risk_score(),
-        locked_count=calculate_locked_count(),
+        review_count=calculate_review_count(),
         traps=TRAP_DEFINITIONS,
         events=events,
         profiles=profiles,
@@ -275,7 +275,7 @@ def trigger():
         trap['department'] = session.get('department')
     event_id = add_event(trap)
     update_risk_for_user(trap)
-    run_ai_agent_watcher(trap)
+    run_rule_watcher(trap)
     return redirect(url_for('dashboard', notice_id=event_id))
 
 # Admin and employee templates (kept at module top-level)
@@ -321,7 +321,7 @@ ADMIN_PAGE = """
     <div class="card metrics">
       <div class="metric"><strong>{{ active_events }}</strong><span>Active demo events</span></div>
       <div class="metric"><strong>{{ campaigns|length }}</strong><span>Campaigns</span></div>
-      <div class="metric"><strong>{{ locked_count }}</strong><span>Profiles needing review</span></div>
+      <div class="metric"><strong>{{ review_count }}</strong><span>Profiles needing review</span></div>
       <div class="metric"><strong>{{ event_count }}</strong><span>Total events</span></div>
     </div>
     <div class="card">
@@ -348,7 +348,7 @@ ADMIN_PAGE = """
     </div>
     {% if agent_alerts %}
     <div class="card">
-      <h2>Rule-Based Learning Recommendations</h2>
+      <h2>Training Recommendations</h2>
       <p style="color:#7ca8c9;margin:8px 0 0;">Transparent demo rules evaluate recorded simulation events and suggest follow-up actions. This prototype does not perform real account lockout, network isolation, or external escalation.</p>
       {% for alert in agent_alerts %}
       <div class="event-item" style="border-left: 4px solid {% if alert.severity == 'CRITICAL' %}#ff6c6c{% elif alert.severity == 'HIGH' %}#f7c74e{% else %}#5ce2a3{% endif %};">
@@ -495,11 +495,11 @@ EMPLOYEE_PAGE = """
 
     {% if user_profile and user_profile.status in ['Needs Review', 'Training Recommended'] %}
     <div class="locked-notice">
-      <h2>⚠️ Training Risk Threshold Reached — Demo Status</h2>
+      <h2>⚠️ Additional Training Guidance Recommended</h2>
       <p><strong>Demo profile status:</strong> <span class="status-chip">HIGH RISK</span></p>
-      <p><strong>Risk Score:</strong> {{ user_profile.risk_score }} points (Critical Threshold Exceeded)</p>
+      <p><strong>Training indicator:</strong> {{ user_profile.risk_score }} points (review threshold reached)</p>
       <p><strong>Reason:</strong> Your training risk indicator crossed the configured threshold after a controlled simulation. No real company account has been locked by this prototype.</p>
-      <p><strong>What Happened:</strong> The exercise recorded an interaction with a simulated phishing scenario. It did not capture real credentials or establish access to company systems.</p>
+      <p><strong>What Happened:</strong> The exercise recorded an interaction with a simulated security scenario. It did not capture real credentials or establish access to company systems.</p>
       <p><strong>Next Steps:</strong></p>
       <ul style="margin:8px 0;padding-left:20px;">
         <li>Contact your IT/Security team immediately</li>
@@ -623,8 +623,8 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     </div>
     <div class="card" style="min-width:280px;">
       <div class="metric"><strong>{{active_events}}</strong><span>Active Traps</span></div>
-      <div class="metric"><strong>{{risk_score}}</strong><span>Overall Risk</span></div>
-      <div class="metric"><strong>{{locked_count}}</strong><span>Profiles needing review</span></div>
+      <div class="metric"><strong>{{risk_score}}</strong><span>Readiness indicator</span></div>
+      <div class="metric"><strong>{{review_count}}</strong><span>Profiles needing review</span></div>
     </div>
   </header>
 
@@ -730,7 +730,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
 """
 
 TRAP_DEFINITIONS = [
-    {"id": "finance-phish", "label": "Finance Phishing Email", "sender": "finance@bank-update.com", "preview": "Urgent: Review your account - Open the message", "user": "Alice Vance", "department": "Finance", "impact": 18, "event_type": "Phishing Link Interaction"},
+    {"id": "finance-phish", "label": "Finance Phishing Email", "sender": "finance@bank-update.example", "preview": "Urgent: Review your account - Open the message", "user": "Alice Vance", "department": "Finance", "impact": 18, "event_type": "Phishing Link Interaction"},
     {"id": "hr-benefits", "label": "HR Benefits Alert", "sender": "HR Department", "preview": "New benefits package available - Review document", "user": "Marcus Ward", "department": "Human Resources", "impact": 14, "event_type": "Phishing Click"},
     {"id": "it-maintenance", "label": "IT Maintenance Notice", "sender": "IT Support <support@company.local>", "preview": "Scheduled maintenance - Review the notice", "user": "Sarah Connor", "department": "IT Operations", "impact": 17, "event_type": "Suspicious Link"},
     {"id": "exec-target", "label": "Executive Fraud Link", "sender": "CEO Office", "preview": "Confidential: Board meeting minutes attached", "user": "Alice Vance", "department": "Finance", "impact": 22, "event_type": "Suspicious Access"},
@@ -850,7 +850,7 @@ def current_risk_score():
     return min(total, 100)
 
 
-def calculate_locked_count():
+def calculate_review_count():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM employees WHERE status = 'Needs Review'")
@@ -906,7 +906,7 @@ def update_risk_for_user(trap):
     return count
 
 
-def run_ai_agent_watcher(trap):
+def run_rule_watcher(trap):
     """Apply transparent demo rules to a simulation event and record recommendations."""
     conn = get_db_connection()
     cur = conn.cursor()
@@ -926,7 +926,7 @@ def run_ai_agent_watcher(trap):
     current_status = emp_row['status']
     timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
     
-    # AI Analysis Rules
+    # Rule-based training-signal review
     action = None
     reason = None
     severity = 'LOW'
@@ -1048,7 +1048,7 @@ def process_sentinel():
 
 
 def get_agent_alerts(limit=10):
-    """Retrieve AI agent alerts and actions."""
+    """Retrieve rule-based training recommendations."""
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute('SELECT * FROM agent_actions ORDER BY id DESC LIMIT ?', (limit,))
@@ -1163,7 +1163,7 @@ def api_status():
     return jsonify({
         'active_events': sum(1 for e in get_latest_events() if e['status'] == 'active'),
         'risk_score': current_risk_score(),
-        'locked_count': calculate_locked_count(),
+        'review_count': calculate_review_count(),
         'profiles': profiles,
     })
 
