@@ -147,6 +147,20 @@ def login():
                 session.permanent = True
                 session['user_role'] = role
                 session['user_name'] = user['display_name']
+                if role == 'employee':
+                    initialize_database()
+                    ensure_seed_data()
+                    employee_conn = get_db_connection()
+                    employee_row = employee_conn.execute(
+                        'SELECT id FROM employees WHERE name = ? AND department = ? ORDER BY id LIMIT 1',
+                        (user['display_name'], user['department'])
+                    ).fetchone()
+                    employee_conn.close()
+                    if employee_row is None:
+                        session.clear()
+                        error = 'Employee profile is not configured.'
+                        return render_template_string(LOGIN_PAGE, error=error), 403
+                    session['employee_id'] = employee_row['id']
                 session['department'] = user['department']
                 return redirect(url_for('dashboard'))
         error = 'Invalid email or password.'
@@ -167,7 +181,7 @@ def dashboard():
     assessment_conn = get_db_connection()
     activate_due_campaigns(assessment_conn)
     campaigns = list_campaigns(assessment_conn)
-    assignments = list_employee_assignments(assessment_conn, session.get('user_name')) if get_current_user() == 'employee' else []
+    assignments = list_employee_assignments(assessment_conn, session.get('employee_id')) if get_current_user() == 'employee' else []
     assessment_conn.close()
     profiles = get_profiles()
     team_member_count = len(profiles)
@@ -304,7 +318,7 @@ def assessment_respond(assignment_id):
         return 'Employee access required', 403
     conn = get_db_connection()
     try:
-        record_interaction(conn, assignment_id, session.get('user_name'), request.form.get('interaction', ''))
+        record_interaction(conn, assignment_id, session.get('employee_id'), request.form.get('interaction', ''))
     except (ValueError, LookupError) as exc:
         conn.close()
         return str(exc), 400
@@ -319,7 +333,7 @@ def learning_complete(assignment_id):
         return 'Employee access required', 403
     conn = get_db_connection()
     try:
-        complete_learning(conn, assignment_id, session.get('user_name'))
+        complete_learning(conn, assignment_id, session.get('employee_id'))
     except LookupError as exc:
         conn.close()
         return str(exc), 404
