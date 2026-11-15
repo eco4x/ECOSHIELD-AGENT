@@ -55,7 +55,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
 
-        signal = record_interaction(self.conn, assignment_id, "Test Employee", "clicked")
+        signal = record_interaction(self.conn, assignment_id, 1, "clicked")
         score = self.conn.execute(
             "SELECT risk_score FROM employees WHERE id = 1"
         ).fetchone()[0]
@@ -68,7 +68,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
         assignment_id = self.conn.execute(
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
-        record_interaction(self.conn, assignment_id, "Test Employee", "reported")
+        record_interaction(self.conn, assignment_id, 1, "reported")
         score = self.conn.execute(
             "SELECT risk_score FROM employees WHERE id = 1"
         ).fetchone()[0]
@@ -81,7 +81,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
         with self.assertRaises(LookupError):
-            record_interaction(self.conn, assignment_id, "Different Employee", "clicked")
+            record_interaction(self.conn, assignment_id, 999, "clicked")
 
     def test_learning_completion_is_recorded(self):
         _, due_at = self.make_due_campaign()
@@ -89,13 +89,58 @@ class AssessmentWorkflowTests(unittest.TestCase):
         assignment_id = self.conn.execute(
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
-        record_interaction(self.conn, assignment_id, "Test Employee", "clicked")
-        complete_learning(self.conn, assignment_id, "Test Employee")
+        record_interaction(self.conn, assignment_id, 1, "clicked")
+        complete_learning(self.conn, assignment_id, 1)
         status = self.conn.execute(
             "SELECT status FROM learning_progress WHERE assignment_id = ?",
             (assignment_id,),
         ).fetchone()[0]
         self.assertEqual(status, "completed")
+
+
+    def test_duplicate_names_are_separated_by_employee_id(self):
+        self.conn.execute(
+            "INSERT INTO employees (id, name, department, risk_score) VALUES (2, 'Test Employee', 'Finance', 0)"
+        )
+        campaign_id, due_at = self.make_due_campaign()
+        self.assertEqual(activate_due_campaigns(self.conn, due_at), 1)
+
+        employee_one = self.conn.execute(
+            "SELECT id FROM assessment_assignments WHERE campaign_id = ? AND employee_id = 1",
+            (campaign_id,),
+        ).fetchone()[0]
+        employee_two = self.conn.execute(
+            "SELECT id FROM assessment_assignments WHERE campaign_id = ? AND employee_id = 2",
+            (campaign_id,),
+        ).fetchone()[0]
+
+        self.assertEqual(len(__import__("assessment_engine").list_employee_assignments(self.conn, 1)), 1)
+        self.assertEqual(len(__import__("assessment_engine").list_employee_assignments(self.conn, 2)), 1)
+        with self.assertRaises(LookupError):
+            record_interaction(self.conn, employee_two, 1, "clicked")
+
+        record_interaction(self.conn, employee_two, 2, "clicked")
+        with self.assertRaises(LookupError):
+            complete_learning(self.conn, employee_two, 1)
+        complete_learning(self.conn, employee_two, 2)
+        self.assertNotEqual(employee_one, employee_two)
+
+    def test_individual_campaign_targets_only_the_selected_employee_id(self):
+        self.conn.execute(
+            "INSERT INTO employees (id, name, department, risk_score) VALUES (2, 'Second Employee', 'Finance', 0)"
+        )
+        scheduled = (_utc_now() + timedelta(minutes=1)).replace(tzinfo=None).isoformat(timespec="seconds")
+        campaign_id = create_campaign(
+            self.conn, "Individual retest", "Finance", "phishing_link",
+            scheduled, "Test Admin", "UTC", target_employee_id=2
+        )
+
+        self.assertEqual(activate_due_campaigns(self.conn, _utc_now() + timedelta(minutes=2)), 1)
+        rows = self.conn.execute(
+            "SELECT employee_id FROM assessment_assignments WHERE campaign_id = ?",
+            (campaign_id,),
+        ).fetchall()
+        self.assertEqual([row[0] for row in rows], [2])
 
     def test_retest_report_compares_click_reporting_and_learning_rates(self):
         baseline_time = (_utc_now() + timedelta(minutes=1)).replace(tzinfo=None).isoformat(timespec="seconds")
@@ -109,7 +154,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (baseline_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, baseline_assignment, "Test Employee", "clicked")
+        record_interaction(self.conn, baseline_assignment, 1, "clicked")
 
         retest_time = (_utc_now() + timedelta(minutes=1)).replace(tzinfo=None).isoformat(timespec="seconds")
         retest_id = create_campaign(
@@ -122,8 +167,8 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (retest_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, retest_assignment, "Test Employee", "reported")
-        complete_learning(self.conn, retest_assignment, "Test Employee")
+        record_interaction(self.conn, retest_assignment, 1, "reported")
+        complete_learning(self.conn, retest_assignment, 1)
 
         report = campaign_report(self.conn, retest_id)
         self.assertEqual(report["metrics"]["response_rate"], 100.0)
@@ -145,7 +190,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (baseline_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, baseline_assignment, "Test Employee", "clicked")
+        record_interaction(self.conn, baseline_assignment, 1, "clicked")
         with self.assertRaises(ValueError):
             create_campaign(
                 self.conn, "Invalid retest", "Finance", "urgent_payment",
