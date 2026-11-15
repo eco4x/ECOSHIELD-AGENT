@@ -91,6 +91,7 @@ def initialize_assessment_schema(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             assignment_id INTEGER NOT NULL UNIQUE,
             employee_name TEXT NOT NULL,
+            employee_id INTEGER,
             lesson_key TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'assigned',
             assigned_at TEXT NOT NULL,
@@ -98,6 +99,17 @@ def initialize_assessment_schema(conn):
         );
         """
     )
+    learning_columns = {row[1] for row in conn.execute("PRAGMA table_info(learning_progress)").fetchall()}
+    if "employee_id" not in learning_columns:
+        conn.execute("ALTER TABLE learning_progress ADD COLUMN employee_id INTEGER")
+    conn.execute("""
+        UPDATE learning_progress
+        SET employee_id = (
+            SELECT employee_id FROM assessment_assignments
+            WHERE assessment_assignments.id = learning_progress.assignment_id
+        )
+        WHERE employee_id IS NULL
+    """)
     campaign_columns = {
         row[1] for row in conn.execute("PRAGMA table_info(assessment_campaigns)").fetchall()
     }
@@ -255,7 +267,7 @@ def list_campaigns(conn, limit=20):
     return [dict(row) for row in rows]
 
 
-def list_employee_assignments(conn, employee_name):
+def list_employee_assignments(conn, employee_id):
     rows = conn.execute(
         """
         SELECT a.id, a.campaign_id, a.employee_name, a.department, a.status,
@@ -265,11 +277,11 @@ def list_employee_assignments(conn, employee_name):
         FROM assessment_assignments a
         JOIN assessment_campaigns c ON c.id = a.campaign_id
         LEFT JOIN learning_progress l ON l.assignment_id = a.id
-        WHERE a.employee_name = ?
+        WHERE a.employee_id = ?
         ORDER BY c.scheduled_at DESC
         LIMIT 20
         """,
-        (employee_name,),
+        (employee_id,),
     ).fetchall()
 
     assignments = []
@@ -287,13 +299,13 @@ def list_employee_assignments(conn, employee_name):
     return assignments
 
 
-def record_interaction(conn, assignment_id, employee_name, interaction):
+def record_interaction(conn, assignment_id, employee_id, interaction):
     if interaction not in {"clicked", "reported", "ignored"}:
         raise ValueError("Choose a valid simulation response.")
 
     row = conn.execute(
         """
-        SELECT a.id, a.status, a.employee_name, c.scenario_key
+        SELECT a.id, a.status, a.employee_id, a.employee_name, c.scenario_key
         FROM assessment_assignments a
         JOIN assessment_campaigns c ON c.id = a.campaign_id
         WHERE a.id = ?
@@ -301,7 +313,7 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
         (assignment_id,),
     ).fetchone()
 
-    if row is None or row["employee_name"] != employee_name:
+    if row is None or row["employee_id"] != employee_id:
         raise LookupError("Assessment not found.")
     if row["status"] != "assigned":
         raise ValueError("This assessment has already been completed.")
@@ -339,10 +351,10 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
     conn.execute(
         """
         INSERT OR IGNORE INTO learning_progress
-            (assignment_id, employee_name, lesson_key, status, assigned_at)
-        VALUES (?, ?, ?, 'assigned', ?)
+            (assignment_id, employee_name, employee_id, lesson_key, status, assigned_at)
+        VALUES (?, ?, ?, ?, 'assigned', ?)
         """,
-        (assignment_id, employee_name, lesson_key, now_text),
+        (assignment_id, row['employee_name'], employee_id, lesson_key, now_text),
     )
 
     remaining = conn.execute(
@@ -365,15 +377,15 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
     return signal
 
 
-def complete_learning(conn, assignment_id, employee_name):
+def complete_learning(conn, assignment_id, employee_id):
     now_text = _utc_now().isoformat(timespec="seconds")
     cursor = conn.execute(
         """
         UPDATE learning_progress
         SET status = 'completed', completed_at = ?
-        WHERE assignment_id = ? AND employee_name = ? AND status = 'assigned'
+        WHERE assignment_id = ? AND employee_id = ? AND status = 'assigned'
         """,
-        (now_text, assignment_id, employee_name),
+        (now_text, assignment_id, employee_id),
     )
     if cursor.rowcount == 0:
         raise LookupError("Learning item not found or already completed.")
