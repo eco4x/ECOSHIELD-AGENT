@@ -908,7 +908,7 @@ def ensure_seed_data():
     try:
         cur = conn.cursor()
         for name, department in targets:
-            cur.execute('SELECT 1 FROM employees WHERE name = ? LIMIT 1', (name,))
+            cur.execute('SELECT 1 FROM employees WHERE name = ? AND department = ? LIMIT 1', (name, department))
             if cur.fetchone() is None:
                 cur.execute(
                     'INSERT INTO employees (name, department) VALUES (?, ?)',
