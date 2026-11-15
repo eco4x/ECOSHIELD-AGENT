@@ -70,7 +70,8 @@ def initialize_assessment_schema(conn):
             status TEXT NOT NULL DEFAULT 'scheduled',
             created_at TEXT NOT NULL,
             created_by TEXT NOT NULL,
-            retest_of_campaign_id INTEGER
+            retest_of_campaign_id INTEGER,
+            target_employee_id INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS assessment_assignments (
@@ -103,6 +104,8 @@ def initialize_assessment_schema(conn):
     }
     if "retest_of_campaign_id" not in campaign_columns:
         conn.execute("ALTER TABLE assessment_campaigns ADD COLUMN retest_of_campaign_id INTEGER")
+    if "target_employee_id" not in campaign_columns:
+        conn.execute("ALTER TABLE assessment_campaigns ADD COLUMN target_employee_id INTEGER")
 
 
 def _utc_now():
@@ -125,15 +128,29 @@ def _parse_schedule(value, timezone_name):
     return scheduled.astimezone(timezone.utc)
 
 
-def create_campaign(conn, name, department, scenario_key, scheduled_at, created_by, timezone_name="Africa/Kampala", retest_of_campaign_id=None):
+def create_campaign(conn, name, department, scenario_key, scheduled_at, created_by, timezone_name="Africa/Kampala", retest_of_campaign_id=None, target_employee_id=None):
     name = (name or "").strip()
     department = (department or "").strip()
     scenario_key = (scenario_key or "").strip()
 
     if not name or len(name) > 80:
         raise ValueError("Campaign name must contain 1 to 80 characters.")
-    if department not in {"All teams", "Finance", "Human Resources", "IT Operations"}:
-        raise ValueError("Choose a valid team.")
+    if target_employee_id not in (None, ""):
+        try:
+            target_employee_id = int(target_employee_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Choose a valid employee.") from exc
+        employee = conn.execute(
+            "SELECT id, department FROM employees WHERE id = ?",
+            (target_employee_id,),
+        ).fetchone()
+        if employee is None:
+            raise ValueError("The selected employee no longer exists.")
+        department = employee["department"]
+    else:
+        target_employee_id = None
+        if department not in {"All teams", "Finance", "Human Resources", "IT Operations"}:
+            raise ValueError("Choose a valid team.")
     if scenario_key not in SCENARIOS:
         raise ValueError("Choose a valid simulation scenario.")
     if not created_by:
@@ -145,12 +162,16 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
         except (TypeError, ValueError) as exc:
             raise ValueError("Choose a valid baseline campaign.") from exc
         baseline = conn.execute(
-            "SELECT department, scenario_key, status FROM assessment_campaigns WHERE id = ?",
+            "SELECT department, scenario_key, status, target_employee_id FROM assessment_campaigns WHERE id = ?",
             (retest_of_campaign_id,),
         ).fetchone()
         if baseline is None or baseline["status"] != "completed":
             raise ValueError("A retest must reference an existing completed campaign.")
-        if baseline["department"] != department or baseline["scenario_key"] != scenario_key:
+        if (
+            baseline["department"] != department
+            or baseline["scenario_key"] != scenario_key
+            or baseline["target_employee_id"] != target_employee_id
+        ):
             raise ValueError("A retest must use the same audience and scenario as its baseline.")
     else:
         retest_of_campaign_id = None
@@ -163,8 +184,8 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
     cursor = conn.execute(
         """
         INSERT INTO assessment_campaigns
-            (name, department, scenario_key, scheduled_at, status, created_at, created_by, retest_of_campaign_id)
-        VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?)
+            (name, department, scenario_key, scheduled_at, status, created_at, created_by, retest_of_campaign_id, target_employee_id)
+        VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)
         """,
         (
             name,
@@ -174,6 +195,7 @@ def create_campaign(conn, name, department, scenario_key, scheduled_at, created_
             now.isoformat(timespec="seconds"),
             created_by,
             retest_of_campaign_id,
+            target_employee_id,
         ),
     )
     conn.commit()
@@ -185,19 +207,24 @@ def activate_due_campaigns(conn, now=None):
     now = now or _utc_now()
     now_text = now.astimezone(timezone.utc).isoformat(timespec="seconds")
     due = conn.execute(
-        "SELECT id, department FROM assessment_campaigns WHERE status = 'scheduled' AND scheduled_at <= ?",
+        "SELECT id, department, target_employee_id FROM assessment_campaigns WHERE status = 'scheduled' AND scheduled_at <= ?",
         (now_text,),
     ).fetchall()
 
     activated = 0
     for campaign in due:
-        if campaign["department"] == "All teams":
+        if campaign["target_employee_id"] is not None:
             employees = conn.execute(
-                "SELECT id, name, department FROM employees ORDER BY name"
+                "SELECT id, name, department FROM employees WHERE id = ?",
+                (campaign["target_employee_id"],),
+            ).fetchall()
+        elif campaign["department"] == "All teams":
+            employees = conn.execute(
+                "SELECT id, name, department FROM employees ORDER BY id"
             ).fetchall()
         else:
             employees = conn.execute(
-                "SELECT id, name, department FROM employees WHERE department = ? ORDER BY name",
+                "SELECT id, name, department FROM employees WHERE department = ? ORDER BY id",
                 (campaign["department"],),
             ).fetchall()
 
@@ -255,7 +282,7 @@ def list_campaigns(conn, limit=20):
     return [dict(row) for row in rows]
 
 
-def list_employee_assignments(conn, employee_name):
+def list_employee_assignments(conn, employee_id):
     rows = conn.execute(
         """
         SELECT a.id, a.campaign_id, a.employee_name, a.department, a.status,
@@ -265,11 +292,11 @@ def list_employee_assignments(conn, employee_name):
         FROM assessment_assignments a
         JOIN assessment_campaigns c ON c.id = a.campaign_id
         LEFT JOIN learning_progress l ON l.assignment_id = a.id
-        WHERE a.employee_name = ?
+        WHERE a.employee_id = ?
         ORDER BY c.scheduled_at DESC
         LIMIT 20
         """,
-        (employee_name,),
+        (employee_id,),
     ).fetchall()
 
     assignments = []
@@ -287,13 +314,13 @@ def list_employee_assignments(conn, employee_name):
     return assignments
 
 
-def record_interaction(conn, assignment_id, employee_name, interaction):
+def record_interaction(conn, assignment_id, employee_id, interaction):
     if interaction not in {"clicked", "reported", "ignored"}:
         raise ValueError("Choose a valid simulation response.")
 
     row = conn.execute(
         """
-        SELECT a.id, a.status, a.employee_name, c.scenario_key
+        SELECT a.id, a.status, a.employee_id, a.employee_name, c.scenario_key
         FROM assessment_assignments a
         JOIN assessment_campaigns c ON c.id = a.campaign_id
         WHERE a.id = ?
@@ -301,7 +328,7 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
         (assignment_id,),
     ).fetchone()
 
-    if row is None or row["employee_name"] != employee_name:
+    if row is None or row["employee_id"] != int(employee_id):
         raise LookupError("Assessment not found.")
     if row["status"] != "assigned":
         raise ValueError("This assessment has already been completed.")
@@ -342,7 +369,7 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
             (assignment_id, employee_name, lesson_key, status, assigned_at)
         VALUES (?, ?, ?, 'assigned', ?)
         """,
-        (assignment_id, employee_name, lesson_key, now_text),
+        (assignment_id, row["employee_name"], lesson_key, now_text),
     )
 
     remaining = conn.execute(
@@ -365,15 +392,17 @@ def record_interaction(conn, assignment_id, employee_name, interaction):
     return signal
 
 
-def complete_learning(conn, assignment_id, employee_name):
+def complete_learning(conn, assignment_id, employee_id):
     now_text = _utc_now().isoformat(timespec="seconds")
     cursor = conn.execute(
         """
         UPDATE learning_progress
         SET status = 'completed', completed_at = ?
-        WHERE assignment_id = ? AND employee_name = ? AND status = 'assigned'
+        WHERE assignment_id = ?
+          AND employee_name = (SELECT employee_name FROM assessment_assignments WHERE id = ? AND employee_id = ?)
+          AND status = 'assigned'
         """,
-        (now_text, assignment_id, employee_name),
+        (now_text, assignment_id, assignment_id, int(employee_id)),
     )
     if cursor.rowcount == 0:
         raise LookupError("Learning item not found or already completed.")
