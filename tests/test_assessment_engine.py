@@ -55,7 +55,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
 
-        signal = record_interaction(self.conn, assignment_id, "Test Employee", "clicked")
+        signal = record_interaction(self.conn, assignment_id, 1, "clicked")
         score = self.conn.execute(
             "SELECT risk_score FROM employees WHERE id = 1"
         ).fetchone()[0]
@@ -81,7 +81,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
         with self.assertRaises(LookupError):
-            record_interaction(self.conn, assignment_id, "Different Employee", "clicked")
+            record_interaction(self.conn, assignment_id, 2, "clicked")
 
     def test_learning_completion_is_recorded(self):
         _, due_at = self.make_due_campaign()
@@ -90,7 +90,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
         record_interaction(self.conn, assignment_id, "Test Employee", "clicked")
-        complete_learning(self.conn, assignment_id, "Test Employee")
+        complete_learning(self.conn, assignment_id, 1)
         status = self.conn.execute(
             "SELECT status FROM learning_progress WHERE assignment_id = ?",
             (assignment_id,),
@@ -109,7 +109,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (baseline_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, baseline_assignment, "Test Employee", "clicked")
+        record_interaction(self.conn, baseline_assignment, 1, "clicked")
 
         retest_time = (_utc_now() + timedelta(minutes=1)).replace(tzinfo=None).isoformat(timespec="seconds")
         retest_id = create_campaign(
@@ -122,7 +122,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (retest_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, retest_assignment, "Test Employee", "reported")
+        record_interaction(self.conn, retest_assignment, 1, "reported")
         complete_learning(self.conn, retest_assignment, "Test Employee")
 
         report = campaign_report(self.conn, retest_id)
