@@ -126,6 +126,31 @@ class AssessmentWorkflowTests(unittest.TestCase):
         complete_learning(self.conn, employee_two, 2)
         self.assertNotEqual(employee_one, employee_two)
 
+
+    def test_existing_campaign_schema_migrates_target_employee_column(self):
+        legacy = sqlite3.connect(":memory:")
+        legacy.row_factory = sqlite3.Row
+        legacy.execute("""
+            CREATE TABLE assessment_campaigns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                scenario_key TEXT NOT NULL,
+                scheduled_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                created_at TEXT NOT NULL,
+                created_by TEXT NOT NULL,
+                retest_of_campaign_id INTEGER
+            )
+        """)
+        initialize_assessment_schema(legacy)
+        columns = {
+            row[1] for row in legacy.execute("PRAGMA table_info(assessment_campaigns)").fetchall()
+        }
+        self.assertIn("target_employee_id", columns)
+        self.assertIn("retest_of_campaign_id", columns)
+        legacy.close()
+
     def test_individual_campaign_targets_only_the_selected_employee_id(self):
         self.conn.execute(
             "INSERT INTO employees (id, name, department, risk_score) VALUES (2, 'Second Employee', 'Finance', 0)"
