@@ -48,6 +48,9 @@ The dashboard fails closed unless these server-side environment variables are co
 - `ECOSHIELD_ADMIN_PASSWORD` — at least 12 characters.
 - `ECOSHIELD_EMPLOYEE_EMAIL`
 - `ECOSHIELD_EMPLOYEE_PASSWORD` — at least 12 characters.
+- `ECOSHIELD_EMPLOYEE_ID` — optional explicit employee record ID for the configured demo employee login. If omitted, the app requires exactly one employee matching the configured demo name and department; ambiguous matches fail closed.
+
+The current employee login is a single configured demo identity, not yet a per-employee account provisioning or SSO integration. Use the explicit employee ID when duplicate names exist.
 
 Use unique private values. Never commit secrets or expose them in client-side code.
 
@@ -63,6 +66,8 @@ export ECOSHIELD_ADMIN_EMAIL='admin@example.test'
 export ECOSHIELD_ADMIN_PASSWORD='replace-with-a-long-unique-password'
 export ECOSHIELD_EMPLOYEE_EMAIL='employee@example.test'
 export ECOSHIELD_EMPLOYEE_PASSWORD='replace-with-another-long-unique-password'
+# Optional: pin the demo login to one employee record when names are duplicated.
+export ECOSHIELD_EMPLOYEE_ID='1'
 export ECOSHIELD_COOKIE_SECURE=false
 python web_dashboard.py
 ```
