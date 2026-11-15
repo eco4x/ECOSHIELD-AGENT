@@ -1158,10 +1158,11 @@ def get_agent_alerts(limit=10):
 def get_user_profile():
   if get_current_user() != 'employee':
     return None
+  employee_id = session.get('employee_id')
   name = session.get('user_name')
   conn = get_db_connection()
   cur = conn.cursor()
-  cur.execute('SELECT name, department, risk_score, status FROM employees WHERE name = ?', (name,))
+  cur.execute('SELECT name, department, risk_score, status FROM employees WHERE id = ?', (employee_id,))
   row = cur.fetchone()
   conn.close()
   if not row:
