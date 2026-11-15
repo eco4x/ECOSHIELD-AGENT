@@ -27,7 +27,7 @@ def setup_vault():
             """
         )
         for name, department in DEFAULT_EMPLOYEES:
-            cursor.execute("SELECT 1 FROM employees WHERE name = ? LIMIT 1", (name,))
+            cursor.execute("SELECT 1 FROM employees WHERE name = ? AND department = ? LIMIT 1", (name, department))
             if cursor.fetchone() is None:
                 cursor.execute(
                     "INSERT INTO employees (name, department) VALUES (?, ?)",
