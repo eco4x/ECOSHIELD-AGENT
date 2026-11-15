@@ -40,6 +40,40 @@ class DashboardSecurityTests(unittest.TestCase):
             follow_redirects=False,
         )
 
+    def test_seed_data_repairs_partially_populated_employee_table(self):
+        conn = web_dashboard.get_db_connection()
+        conn.execute("DELETE FROM employees WHERE name IN (?, ?)", ("Marcus Ward", "Sarah Connor"))
+        conn.commit()
+        conn.close()
+
+        web_dashboard.ensure_seed_data()
+        conn = web_dashboard.get_db_connection()
+        rows = conn.execute(
+            "SELECT name, department, COUNT(*) FROM employees GROUP BY name, department ORDER BY name"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(
+            [(row[0], row[1], row[2]) for row in rows],
+            [("Alice Vance", "Finance", 1), ("Marcus Ward", "Human Resources", 1), ("Sarah Connor", "IT Operations", 1)],
+        )
+
+    def test_repeated_vault_initialization_does_not_duplicate_employees(self):
+        import vault
+
+        with patch.dict(os.environ, {"ECOSHIELD_DB_PATH": self.db_path}):
+            vault.setup_vault()
+            vault.setup_vault()
+
+        conn = web_dashboard.get_db_connection()
+        rows = conn.execute(
+            "SELECT name, COUNT(*) FROM employees GROUP BY name ORDER BY name"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(
+            [(row[0], row[1]) for row in rows],
+            [("Alice Vance", 1), ("Marcus Ward", 1), ("Sarah Connor", 1)],
+        )
+
     def test_admin_api_rejects_anonymous_requests(self):
         response = self.client.get("/api/profiles")
         self.assertEqual(response.status_code, 401)
