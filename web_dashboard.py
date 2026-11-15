@@ -143,11 +143,41 @@ def login():
         password = request.form.get('password', '')
         for role, user in CREDENTIALS.items():
             if hmac.compare_digest(email, user['email']) and hmac.compare_digest(password, user['password']):
+                employee_id = None
+                if role == 'employee':
+                    initialize_database()
+                    ensure_seed_data()
+                    conn = get_db_connection()
+                    configured_id = os.environ.get('ECOSHIELD_EMPLOYEE_ID', '').strip()
+                    if configured_id:
+                        try:
+                            employee = conn.execute(
+                                'SELECT id, name, department FROM employees WHERE id = ?',
+                                (int(configured_id),),
+                            ).fetchone()
+                        except ValueError:
+                            employee = None
+                        matches = [employee] if employee else []
+                    else:
+                        matches = conn.execute(
+                            'SELECT id, name, department FROM employees WHERE name = ? AND department = ? ORDER BY id',
+                            (user['display_name'], user['department']),
+                        ).fetchall()
+                    conn.close()
+                    if len(matches) != 1:
+                        error = 'Employee account mapping is missing or ambiguous. Contact the organisation administrator.'
+                        break
+                    employee_id = matches[0]['id']
+                    user = dict(user)
+                    user['display_name'] = matches[0]['name']
+                    user['department'] = matches[0]['department']
                 session.clear()
                 session.permanent = True
                 session['user_role'] = role
                 session['user_name'] = user['display_name']
                 session['department'] = user['department']
+                if employee_id is not None:
+                    session['employee_id'] = employee_id
                 return redirect(url_for('dashboard'))
         error = 'Invalid email or password.'
     return render_template_string(LOGIN_PAGE, error=error)
@@ -167,7 +197,12 @@ def dashboard():
     assessment_conn = get_db_connection()
     activate_due_campaigns(assessment_conn)
     campaigns = list_campaigns(assessment_conn)
-    assignments = list_employee_assignments(assessment_conn, session.get('user_name')) if get_current_user() == 'employee' else []
+    assignments = list_employee_assignments(assessment_conn, session.get('employee_id')) if get_current_user() == 'employee' else []
+    employee_targets = [
+        dict(row) for row in assessment_conn.execute(
+            'SELECT id, name, department FROM employees ORDER BY department, name, id'
+        ).fetchall()
+    ]
     assessment_conn.close()
     profiles = get_profiles()
     team_member_count = len(profiles)
@@ -211,7 +246,8 @@ def dashboard():
         team_member_count=team_member_count,
         completed_assessments=completed_assessments,
         completed_learning=completed_learning,
-        scenario_options=scenario_options()
+        scenario_options=scenario_options(),
+        employee_targets=employee_targets
     )
 
 
@@ -231,6 +267,7 @@ def campaign_create():
             session.get('user_name'),
             os.environ.get('ECOSHIELD_TIMEZONE', 'Africa/Kampala'),
             request.form.get('retest_of_campaign_id') or None,
+            request.form.get('target_employee_id') or None,
         )
     except ValueError as exc:
         conn.close()
@@ -304,7 +341,7 @@ def assessment_respond(assignment_id):
         return 'Employee access required', 403
     conn = get_db_connection()
     try:
-        record_interaction(conn, assignment_id, session.get('user_name'), request.form.get('interaction', ''))
+        record_interaction(conn, assignment_id, session.get('employee_id'), request.form.get('interaction', ''))
     except (ValueError, LookupError) as exc:
         conn.close()
         return str(exc), 400
@@ -319,7 +356,7 @@ def learning_complete(assignment_id):
         return 'Employee access required', 403
     conn = get_db_connection()
     try:
-        complete_learning(conn, assignment_id, session.get('user_name'))
+        complete_learning(conn, assignment_id, session.get('employee_id'))
     except LookupError as exc:
         conn.close()
         return str(exc), 404
@@ -395,7 +432,8 @@ ADMIN_PAGE = """
       <form method="POST" action="/campaigns/create" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;align-items:end;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <label>Campaign name<input name="name" maxlength="80" required placeholder="November security check" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
-        <label>Audience<select name="department" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option>All teams</option><option>Finance</option><option>Human Resources</option><option>IT Operations</option></select></label>
+        <label>Department-wide audience<select name="department" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option>All teams</option><option>Finance</option><option>Human Resources</option><option>IT Operations</option></select></label>
+        <label>Optional individual retest<select name="target_employee_id" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option value="">No individual target — use department audience</option>{% for employee in employee_targets %}<option value="{{ employee.id }}">{{ employee.name }} · {{ employee.department }} · ID {{ employee.id }}</option>{% endfor %}</select></label>
         <label>Scenario<select name="scenario_key" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;">{% for scenario in scenario_options %}<option value="{{ scenario.key }}">{{ scenario.title }}</option>{% endfor %}</select></label>
         <label>Retest baseline (optional)<select name="retest_of_campaign_id" style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;"><option value="">New baseline campaign</option>{% for campaign in campaigns %}{% if campaign.status == 'completed' %}<option value="{{ campaign.id }}">{{ campaign.name }} · {{ campaign.department }} · {{ campaign.scenario_key }}</option>{% endif %}{% endfor %}</select></label>
         <label>Schedule (Kampala time)<input type="datetime-local" name="scheduled_at" required style="display:block;width:100%;padding:12px;margin-top:6px;border-radius:10px;" /></label>
@@ -404,7 +442,7 @@ ADMIN_PAGE = """
       <h3 style="margin-top:24px;">Campaign activity</h3>
       {% for campaign in campaigns %}
         <div class="event-item">
-          <strong>{{ campaign.name }}</strong> · {{ campaign.department }} · {{ campaign.scenario_key }}
+          <strong>{{ campaign.name }}</strong> · {% if campaign.target_employee_id %}Individual retest · employee ID {{ campaign.target_employee_id }}{% else %}{{ campaign.department }}{% endif %} · {{ campaign.scenario_key }}
           <p style="color:#7ca8c9;margin:8px 0;">{{ campaign.scheduled_at }} UTC · Status: {{ campaign.status }}</p>
           <p style="color:#a7cfe5;margin:0;">Assigned: {{ campaign.assigned_count }} · Responses: {{ campaign.completed_count or 0 }} · Clicked: {{ campaign.clicked_count }} · Reported: {{ campaign.reported_count }}</p>
           <p style="margin:10px 0 0;"><a href="{{ url_for('campaign_report_view', campaign_id=campaign.id) }}" style="color:#39d5e0;">View readiness report →</a></p>
