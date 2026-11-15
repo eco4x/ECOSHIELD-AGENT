@@ -92,7 +92,7 @@ class TrapSecurityTests(unittest.TestCase):
 
         response = self.client.post(
             "/capture",
-            data={"dept": "finance"},
+            data={"dept": "finance", "capture_id": "test-capture-0002"},
             headers=self.auth_headers(),
         )
         self.assertEqual(response.status_code, 200)
