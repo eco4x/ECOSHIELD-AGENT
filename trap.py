@@ -7,6 +7,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
+DB_PATH = os.environ.get("ECOSHIELD_DB_PATH", "ecoshield.db")
 
 # Keep the simulator credential outside source control. Set
 # ECOSHIELD_SIMULATION_TOKEN in the environment before enabling capture.
@@ -115,12 +116,11 @@ def capture():
         abort(400, description="Unknown simulation department.")
 
     try:
-        with sqlite3.connect("ecoshield.db", timeout=5) as conn:
+        with sqlite3.connect(DB_PATH, timeout=5) as conn:
             cursor = conn.execute(
                 """
                 UPDATE employees
-                SET risk_score = risk_score + 25,
-                    status = 'Compromised'
+                SET risk_score = MIN(100, MAX(0, COALESCE(risk_score, 0) + 25))
                 WHERE department = ?
                 """,
                 (brand["department"],),
