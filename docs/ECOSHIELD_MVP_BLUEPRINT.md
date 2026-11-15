@@ -12,6 +12,57 @@ Small organisations and teams that need practical security awareness and basic h
 
 The initial product should be fast to configure, inexpensive to operate, understandable to a non-specialist administrator, and useful without SIEM, EDR, or identity-provider integrations.
 
+## Expanded product architecture: organisation-configured human risk
+
+ECOSHIELD is intended to grow beyond a campaign-and-awareness prototype into an organisation-configured Human Risk Management and Security Response platform. The campaign workflow remains the first usable entry point, but it must operate on shared organisation configuration and shared risk, learning, policy, and response services.
+
+### Organisation setup and security profile
+
+During onboarding, an authorised administrator should be able to configure:
+
+- Organisation identity, timezone, departments, teams, and employee directory source.
+- Authorised data connections and their scope (initially import/read-only wherever possible).
+- Risk indicators, weights, evidence windows, decay/expiry rules, and review thresholds.
+- Campaign defaults, eligible audiences, scenario categories, and assessment frequency.
+- Awareness content, language/readability level, and escalation contacts.
+- Response policies, approval requirements, permitted actions, and restrictions.
+
+Configuration must be versioned and auditable. Every assessment should retain the configuration version and policy version used, so an administrator can understand why a score or recommendation was produced. Do not allow an integration to grant broader access than the administrator explicitly authorised.
+
+### Three connected but separate engines
+
+1. **Risk assessment engine:** combines permitted evidence such as assessment outcomes, reporting behaviour, repeated patterns, learning completion, role context, and approved security signals. It produces explainable indicators with evidence, confidence/limitations, time window, and freshness. A simulation result alone is never proof of compromise.
+2. **Awareness and learning engine:** maps a verified learning need to a short, plain-language teaching note, examples, practical next steps, and an optional retest. It must avoid jargon, explain why the behaviour matters, and never shame employees.
+3. **Response and policy engine:** evaluates the organisation's configured policy against the risk assessment and proposes an action. Actions can include no action, targeted learning, administrator review, or an approved temporary restriction. Every decision records the rule, evidence, approver (if required), execution result, and verification state.
+
+These engines share event and identity contracts but keep their responsibilities distinct. A risk score is not itself an instruction to block a user.
+
+### Response safety and control levels
+
+- **Simulation:** demonstrate the proposed action and label it clearly as simulated.
+- **Recommendation:** create a review item for an authorised administrator.
+- **Controlled execution:** only through an explicitly authorised integration, least-privilege credentials, scoped policy, approval where appropriate, time limits, rollback/recovery path, and post-action verification.
+
+A failed awareness test must never automatically lock an account, isolate a device, revoke access, or label an employee compromised. High-impact actions require independent evidence and explicit policy authorisation. If execution cannot be verified, report the action as unverified or failed—not successful.
+
+### Risk score semantics
+
+Risk indicators are configurable decision-support signals, not employee grades or predictions of individual character. Show contributing factors and their weights, evidence timestamps, confidence/coverage limitations, and expiry/decay. Include positive protective behaviour such as reporting suspicious activity and improvement after learning. Restrict individual-level visibility to authorised roles; prefer aggregate team trends for routine reporting. Do not expose punitive public leaderboards.
+
+### Shared-core implementation sequence
+
+Build this incrementally on the existing campaign workflow:
+
+1. Stable employee identity and authenticated subject ownership (IDs, not display names).
+2. Canonical event records with source, timestamp, event type, tenant/organisation context, and idempotency key.
+3. Versioned organisation configuration and risk indicator definitions.
+4. Explainable risk assessment service, with score breakdown and time windows.
+5. Plain-language awareness content mapped to assessment evidence.
+6. Policy evaluation and response recommendation records.
+7. Approval-gated, verified integrations only after the above contracts are tested.
+
+The current prototype remains single-organisation and demo-authenticated. Do not claim multi-tenancy, production integrations, AI-driven scoring, or real containment until those capabilities are implemented and independently tested.
+
 ## Product loop
 
 1. **Assess** — An administrator creates a campaign, chooses a scenario and audience, and schedules a controlled assessment.
