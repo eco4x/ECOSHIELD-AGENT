@@ -1,5 +1,6 @@
 import hmac
 import os
+import secrets
 import sqlite3
 
 from flask import Flask, Response, abort, render_template_string, request
@@ -52,6 +53,7 @@ HTML_LAYOUT = """
     </p>
     <form method="POST" action="/capture">
         <input type="hidden" name="dept" value="{{ dept_key }}">
+        <input type="hidden" name="capture_id" value="{{ capture_id }}">
         <button type="submit" style="background:{{ accent }}; color:white; border:none; padding:12px; width:100%; border-radius:3px; cursor:pointer; font-weight:bold;">
             Run Security Simulation
         </button>
@@ -100,6 +102,7 @@ def index():
         accent=brand["accent"],
         msg=brand["msg"],
         dept_key=dept_key,
+        capture_id=secrets.token_urlsafe(24),
     )
 
 
@@ -115,8 +118,29 @@ def capture():
     if brand is None:
         abort(400, description="Unknown simulation department.")
 
+    capture_id = request.form.get("capture_id", "").strip()
+    if not capture_id or len(capture_id) > 128:
+        abort(400, description="A valid simulation capture identifier is required.")
+
     try:
         with sqlite3.connect(DB_PATH, timeout=5) as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS trap_capture_events (
+                    capture_id TEXT PRIMARY KEY,
+                    department TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            try:
+                conn.execute(
+                    "INSERT INTO trap_capture_events (capture_id, department) VALUES (?, ?)",
+                    (capture_id, brand["department"]),
+                )
+            except sqlite3.IntegrityError:
+                return "This simulation submission has already been recorded.", 409
+
             cursor = conn.execute(
                 """
                 UPDATE employees
