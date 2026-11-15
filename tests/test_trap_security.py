@@ -61,6 +61,26 @@ class TrapSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_capture_rejects_replayed_capture_id_without_inflating_risk(self):
+        before = web_dashboard.get_db_connection()
+        initial_score = before.execute(
+            "SELECT risk_score FROM employees WHERE department = ?", ("Finance",)
+        ).fetchone()["risk_score"]
+        before.close()
+
+        payload = {"dept": "finance", "capture_id": "test-capture-0001"}
+        first = self.client.post("/capture", data=payload, headers=self.auth_headers())
+        replay = self.client.post("/capture", data=payload, headers=self.auth_headers())
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(replay.status_code, 409)
+
+        after = web_dashboard.get_db_connection()
+        final_score = after.execute(
+            "SELECT risk_score FROM employees WHERE department = ?", ("Finance",)
+        ).fetchone()["risk_score"]
+        after.close()
+        self.assertEqual(final_score, min(100, initial_score + 25))
+
     def test_capture_uses_dashboard_database_and_does_not_mark_compromised(self):
         before = web_dashboard.get_db_connection()
         employee_before = before.execute(
