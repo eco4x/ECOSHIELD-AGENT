@@ -860,18 +860,25 @@ def initialize_database():
 
 
 def ensure_seed_data():
+    """Insert missing demo employees without duplicating existing records."""
+    targets = (
+        ('Alice Vance', 'Finance'),
+        ('Marcus Ward', 'Human Resources'),
+        ('Sarah Connor', 'IT Operations'),
+    )
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM employees")
-    if cur.fetchone()[0] == 0:
-        targets = [
-            ('Alice Vance', 'Finance'),
-            ('Marcus Ward', 'Human Resources'),
-            ('Sarah Connor', 'IT Operations'),
-        ]
-        cur.executemany('INSERT INTO employees (name, department) VALUES (?, ?)', targets)
+    try:
+        cur = conn.cursor()
+        for name, department in targets:
+            cur.execute('SELECT 1 FROM employees WHERE name = ? LIMIT 1', (name,))
+            if cur.fetchone() is None:
+                cur.execute(
+                    'INSERT INTO employees (name, department) VALUES (?, ?)',
+                    (name, department),
+                )
         conn.commit()
-    conn.close()
+    finally:
+        conn.close()
 
 
 def score_label(score):
