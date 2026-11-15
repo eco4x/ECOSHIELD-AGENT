@@ -68,7 +68,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
         assignment_id = self.conn.execute(
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
-        record_interaction(self.conn, assignment_id, "Test Employee", "reported")
+        record_interaction(self.conn, assignment_id, 1, "reported")
         score = self.conn.execute(
             "SELECT risk_score FROM employees WHERE id = 1"
         ).fetchone()[0]
@@ -89,7 +89,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
         assignment_id = self.conn.execute(
             "SELECT id FROM assessment_assignments"
         ).fetchone()[0]
-        record_interaction(self.conn, assignment_id, "Test Employee", "clicked")
+        record_interaction(self.conn, assignment_id, 1, "clicked")
         complete_learning(self.conn, assignment_id, 1)
         status = self.conn.execute(
             "SELECT status FROM learning_progress WHERE assignment_id = ?",
@@ -123,7 +123,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             (retest_id,),
         ).fetchone()[0]
         record_interaction(self.conn, retest_assignment, 1, "reported")
-        complete_learning(self.conn, retest_assignment, "Test Employee")
+        complete_learning(self.conn, retest_assignment, 1)
 
         report = campaign_report(self.conn, retest_id)
         self.assertEqual(report["metrics"]["response_rate"], 100.0)
@@ -145,7 +145,7 @@ class AssessmentWorkflowTests(unittest.TestCase):
             "SELECT id FROM assessment_assignments WHERE campaign_id = ?",
             (baseline_id,),
         ).fetchone()[0]
-        record_interaction(self.conn, baseline_assignment, "Test Employee", "clicked")
+        record_interaction(self.conn, baseline_assignment, 1, "clicked")
         with self.assertRaises(ValueError):
             create_campaign(
                 self.conn, "Invalid retest", "Finance", "urgent_payment",
