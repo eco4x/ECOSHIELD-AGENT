@@ -1033,6 +1033,8 @@ def export_events():
 
 @app.route('/api/status')
 def api_status():
+    if get_current_user() != 'admin':
+        return jsonify({'error': 'administrator_role_required'}), 403
     profiles = get_profiles()
     return jsonify({
         'active_events': sum(1 for e in get_latest_events() if e['status'] == 'active'),
@@ -1044,16 +1046,22 @@ def api_status():
 
 @app.route('/api/events')
 def api_events():
+    if get_current_user() != 'admin':
+        return jsonify({'error': 'administrator_role_required'}), 403
     return jsonify(get_latest_events(50))
 
 
 @app.route('/api/profiles')
 def api_profiles():
+    if get_current_user() != 'admin':
+        return jsonify({'error': 'administrator_role_required'}), 403
     return jsonify(get_profiles())
 
 
 @app.route('/api/ai/analyze', methods=['POST'])
 def ai_analyze():
+    if get_current_user() != 'admin':
+        return jsonify({'error': 'administrator_role_required'}), 403
     data = request.json or {}
     events = data.get('events') or []
     if not events:
