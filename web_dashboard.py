@@ -2,25 +2,22 @@
 import sqlite3
 import os
 from io import StringIO
-from datetime import datetime
-app = Flask(__name__)
-app.secret_key = os.environ.get('ECOSHIELD_SECRET_KEY', 'ecoshield-demo-key')
+from datetime import datetime, timedelta
+import secrets
+import hmac
+from werkzeug.security import check_password_hash, generate_password_hash
 
-ADMIN_TOKEN = os.environ.get('ECOSHIELD_ADMIN_TOKEN', 'AdminDemo!2026')
-CREDENTIALS = {
-  'admin': {
-    'email': 'admin@ecoshield.local',
-    'password': 'AdminDemo!2026',
-    'display_name': 'SOC Admin',
-    'department': 'Security Operations'
-  },
-  'employee': {
-    'email': 'alice.vance@ecofinance.local',
-    'password': 'Hunter22!',
-    'display_name': 'Alice Vance',
-    'department': 'Finance'
-  }
-}
+app = Flask(__name__)
+secret_key = os.environ.get('ECOSHIELD_SECRET_KEY')
+if not secret_key:
+    raise RuntimeError('ECOSHIELD_SECRET_KEY must be set; refusing to start with a predictable session key.')
+app.config.update(
+    SECRET_KEY=secret_key,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.environ.get('ECOSHIELD_COOKIE_SECURE', 'true').lower() == 'true',
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=30),
+)
 
 SOURCE_INFOS = {
   'Alice Vance': {'ip': '10.1.24.11', 'computer': 'FIN-WKSTN-A1', 'network': 'Finance VLAN'},
@@ -49,17 +46,14 @@ LOGIN_PAGE = """
 <body>
   <div class="card">
     <h1>ECOSHIELD Demo Login</h1>
-    <p>Use the dummy credentials below to open a separate admin tab and employee tab for the simulation.</p>
+    <p>Sign in with an account provisioned by your EcoShield administrator.</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form method="POST" action="/login">
-      <input name="email" placeholder="Email" autocomplete="username" required />
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+      <input name="email" type="email" placeholder="Email" autocomplete="username" required />
       <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
       <button type="submit">Sign in</button>
     </form>
-    <div class="hint">
-      <strong>Admin:</strong> admin@ecoshield.local / AdminDemo!2026<br />
-      <strong>Employee:</strong> alice.vance@ecofinance.local / Hunter22!
-    </div>
   </div>
 </body>
 </html>
@@ -74,21 +68,30 @@ def home():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    initialize_database()
+    ensure_bootstrap_users()
     error = None
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
-        password = request.form.get('password', '').strip()
-        for role, user in CREDENTIALS.items():
-            if email == user['email'] and password == user['password']:
-                session['user_role'] = role
-                session['user_name'] = user['display_name']
-                session['department'] = user['department']
-                return redirect(url_for('dashboard'))
-        error = 'Invalid credentials. Use the demo values shown below.'
-    return render_template_string(LOGIN_PAGE, error=error)
+        password = request.form.get('password', '')
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute('SELECT email, password_hash, role, display_name, department, is_active FROM auth_users WHERE email = ?', (email,))
+        user = cur.fetchone()
+        conn.close()
+        if user and user['is_active'] and check_password_hash(user['password_hash'], password):
+            session.clear()
+            session.permanent = True
+            session['user_role'] = user['role']
+            session['user_name'] = user['display_name']
+            session['department'] = user['department']
+            session['csrf_token'] = secrets.token_urlsafe(32)
+            return redirect(url_for('dashboard'))
+        error = 'Invalid credentials or inactive account.'
+    return render_template_string(LOGIN_PAGE, error=error, csrf_token=get_csrf_token())
 
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 def logout():
     session.clear()
     return redirect(url_for('login'))
@@ -132,7 +135,6 @@ def dashboard():
         user_role=user_role,
         user_name=session.get('user_name'),
         department=session.get('department'),
-        admin_token=ADMIN_TOKEN,
         user_profile=user_profile,
         agent_alerts=agent_alerts
     )
@@ -230,7 +232,7 @@ ADMIN_PAGE = """
           <p style="color:#7ca8c9;margin:8px 0 0;">Review where the phish came from, affected user, and quarantine status.</p>
         </div>
         <form method="POST" action="/admin/actions" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-          <input name="admin_token" placeholder="Admin token" autocomplete="off" style="padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#081823;color:#e9f7ff;" />
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <button name="action" value="run_sentinel">Run Sentinel</button>
           <button name="action" value="export_events">Export Logs</button>
         </form>
@@ -444,6 +446,8 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
       <div class="button-row">
         {% for trap in traps %}
           <form method="POST" action="/trigger" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <input type="hidden" name="trap_id" value="{{trap.id}}" />
             <button type="submit">{{trap.label}}</button>
           </form>
@@ -501,17 +505,12 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     <section class="card span4">
       <h2>Demo Credentials</h2>
       <div class="list-item" style="grid-template-columns:1fr;">
-        <strong>Admin token</strong>
-        <span style="color:var(--muted);">AdminDemo!2026</span>
-      </div>
-      <div class="list-item" style="grid-template-columns:1fr;">
-        <strong>Phished user</strong>
-        <span style="color:var(--muted);">alice.vance@ecofinance.local</span>
-        <span style="color:var(--muted);">Hunter22!</span>
+        <strong>Access control</strong>
+        <span style="color:var(--muted);">Administrative actions require an authenticated administrator account.</span>
       </div>
       <div class="control-panel" style="margin-top:12px;">
         <form method="POST" action="/admin/actions">
-          <input name="admin_token" placeholder="Admin token" autocomplete="off" />
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
           <div class="button-row" style="margin-top:12px;">
             <button name="action" value="run_sentinel" class="control-button">Run Sentinel</button>
             <button name="action" value="export_events" class="control-button">Export Events</button>
@@ -531,6 +530,7 @@ h1{margin:0;font-size:clamp(2rem,2.5vw,3rem);letter-spacing:.03em;}
     <p>{{notice_event.details}}</p>
     <p style="color:var(--muted);">Recommended actions: change the password, report the event to admin, and do not reuse credentials.</p>
     <form method="POST" action="/api/report">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
       <input type="hidden" name="user" value="{{notice_event.user}}" />
       <input type="hidden" name="event_id" value="{{notice_event.id}}" />
       <textarea name="note" placeholder="Optional report note"></textarea>
@@ -588,9 +588,45 @@ def get_current_user():
     return session.get('user_role')
 
 
+def get_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_urlsafe(32)
+    return session['csrf_token']
+
+
+@app.context_processor
+def inject_security_context():
+    return {'csrf_token': get_csrf_token()}
+
+
+@app.before_request
+def enforce_authentication_and_csrf():
+    if request.endpoint not in ('home', 'login', 'static') and not get_current_user():
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'authentication_required'}), 401
+        return redirect(url_for('login'))
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        supplied = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        expected = session.get('csrf_token', '')
+        if not supplied or not expected or not hmac.compare_digest(supplied, expected):
+            return jsonify({'error': 'csrf_validation_failed'}), 400
+
+
+
 def initialize_database():
     conn = get_db_connection()
     cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS auth_users (
+            id INTEGER PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('admin', 'employee')),
+            display_name TEXT NOT NULL,
+            department TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        )''')
     cur.execute('''
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY,
@@ -638,6 +674,30 @@ def initialize_database():
             escalation_status TEXT,
             isolation_details TEXT
         )''')
+    conn.commit()
+    conn.close()
+
+
+def ensure_bootstrap_users():
+    """Create initial accounts from environment variables; never ship default credentials."""
+    candidates = [
+        ('ECOSHIELD_BOOTSTRAP_ADMIN_EMAIL', 'ECOSHIELD_BOOTSTRAP_ADMIN_PASSWORD', 'admin', 'SOC Admin', 'Security Operations'),
+        ('ECOSHIELD_BOOTSTRAP_EMPLOYEE_EMAIL', 'ECOSHIELD_BOOTSTRAP_EMPLOYEE_PASSWORD', 'employee', os.environ.get('ECOSHIELD_BOOTSTRAP_EMPLOYEE_NAME', 'Demo Employee'), os.environ.get('ECOSHIELD_BOOTSTRAP_EMPLOYEE_DEPARTMENT', 'General')),
+    ]
+    conn = get_db_connection()
+    cur = conn.cursor()
+    for email_key, password_key, role, display_name, department in candidates:
+        email = os.environ.get(email_key, '').strip().lower()
+        password = os.environ.get(password_key, '')
+        if not email and not password:
+            continue
+        if not email or len(password) < 14:
+            conn.close()
+            raise RuntimeError(f'{email_key} and {password_key} must both be set; password must be at least 14 characters.')
+        cur.execute('SELECT id FROM auth_users WHERE email = ?', (email,))
+        if cur.fetchone() is None:
+            cur.execute('INSERT INTO auth_users (email, password_hash, role, display_name, department, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                        (email, generate_password_hash(password), role, display_name, department, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')))
     conn.commit()
     conn.close()
 
@@ -923,7 +983,7 @@ def get_user_profile():
 @app.route('/api/report', methods=['POST'])
 def api_report():
     data = request.form or request.json or {}
-    user = data.get('user')
+    user = session.get('user_name')
     event_id = data.get('event_id')
     note = data.get('note', '')
     ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -939,10 +999,9 @@ def api_report():
 
 @app.route('/admin/actions', methods=['POST'])
 def admin_actions():
-    token = request.form.get('admin_token')
+    if get_current_user() != 'admin':
+        return "Forbidden: administrator role required", 403
     action = request.form.get('action')
-    if token != ADMIN_TOKEN:
-        return "Unauthorized (invalid admin token)", 401
     if action == 'run_sentinel':
         process_sentinel()
         return redirect(url_for('dashboard'))
@@ -953,6 +1012,8 @@ def admin_actions():
 
 @app.route('/export')
 def export_events():
+    if get_current_user() != 'admin':
+        return "Forbidden: administrator role required", 403
     fmt = request.args.get('format', 'csv')
     conn = get_db_connection()
     cur = conn.cursor()
@@ -1011,4 +1072,5 @@ def ai_analyze():
 if __name__ == '__main__':
     initialize_database()
     ensure_seed_data()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    ensure_bootstrap_users()
+    app.run(host='0.0.0.0', port=5000, debug=False)
