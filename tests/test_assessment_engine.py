@@ -152,6 +152,37 @@ class AssessmentWorkflowTests(unittest.TestCase):
                 baseline_time, "Test Admin", "UTC", baseline_id
             )
 
+    def test_all_team_campaign_assigns_finance_hr_and_it_once_across_repeated_scheduler_polls(self):
+        self.conn.executemany(
+            "INSERT INTO employees (id, name, department, risk_score) VALUES (?, ?, ?, ?)",
+            [
+                (2, "HR Employee", "Human Resources", 0),
+                (3, "IT Employee", "IT Operations", 0),
+            ],
+        )
+        scheduled = (_utc_now() + timedelta(minutes=1)).replace(tzinfo=None).isoformat(timespec="seconds")
+        campaign_id = create_campaign(
+            self.conn, "All teams regression", "All teams", "phishing_link",
+            scheduled, "Test Admin", "UTC"
+        )
+        due_at = _utc_now() + timedelta(minutes=2)
+
+        self.assertEqual(activate_due_campaigns(self.conn, due_at), 1)
+        self.assertEqual(activate_due_campaigns(self.conn, due_at), 0)
+        rows = self.conn.execute(
+            "SELECT employee_name, department, COUNT(*) FROM assessment_assignments "
+            "WHERE campaign_id = ? GROUP BY employee_name, department ORDER BY department",
+            (campaign_id,),
+        ).fetchall()
+        self.assertEqual(
+            [(row[0], row[1], row[2]) for row in rows],
+            [
+                ("HR Employee", "Human Resources", 1),
+                ("IT Employee", "IT Operations", 1),
+                ("Test Employee", "Finance", 1),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
