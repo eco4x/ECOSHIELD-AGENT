@@ -193,7 +193,7 @@ ADMIN_PAGE = """
         <p style="color:#7ca8c9;margin:8px 0 0;">Logged in as {{ user_name }} · {{ department }}</p>
       </div>
       <div class="button-row">
-        <a class="logout" href="/logout">Logout</a>
+        <form method="POST" action="/logout" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}" /><button class="logout" type="submit">Logout</button></form>
       </div>
     </div>
     <div class="card metrics">
@@ -302,7 +302,7 @@ EMPLOYEE_PAGE = """
         <h1>📧 Email Inbox</h1>
         <p style="color:#7ca8c9;margin:8px 0 0;">{{ user_name }} · {{ department }}</p>
       </div>
-      <a class="logout" href="/logout">Logout</a>
+      <form method="POST" action="/logout" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}" /><button class="logout" type="submit">Logout</button></form>
     </div>
 
     {% if user_profile and user_profile.status == 'LOCKED' %}
