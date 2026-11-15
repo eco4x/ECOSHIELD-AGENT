@@ -248,9 +248,9 @@ class AssessmentWorkflowTests(unittest.TestCase):
         self.assertEqual(
             [(row[0], row[1], row[2]) for row in rows],
             [
+                ("Test Employee", "Finance", 1),
                 ("HR Employee", "Human Resources", 1),
                 ("IT Employee", "IT Operations", 1),
-                ("Test Employee", "Finance", 1),
             ],
         )
 
