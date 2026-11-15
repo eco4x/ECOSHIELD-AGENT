@@ -10,6 +10,7 @@ from assessment_engine import (
     complete_learning,
     create_campaign,
     initialize_assessment_schema,
+    list_employee_assignments,
     record_interaction,
 )
 
@@ -114,8 +115,8 @@ class AssessmentWorkflowTests(unittest.TestCase):
             (campaign_id,),
         ).fetchone()[0]
 
-        self.assertEqual(len(__import__("assessment_engine").list_employee_assignments(self.conn, 1)), 1)
-        self.assertEqual(len(__import__("assessment_engine").list_employee_assignments(self.conn, 2)), 1)
+        self.assertEqual(len(list_employee_assignments(self.conn, 1)), 1)
+        self.assertEqual(len(list_employee_assignments(self.conn, 2)), 1)
         with self.assertRaises(LookupError):
             record_interaction(self.conn, employee_two, 1, "clicked")
 
