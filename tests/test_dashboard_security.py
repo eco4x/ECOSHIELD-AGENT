@@ -108,6 +108,39 @@ class DashboardSecurityTests(unittest.TestCase):
         ).fetchone()[0], 1)
         conn.close()
 
+
+    def test_admin_can_create_organization_and_department(self):
+        self.login("admin@example.test", "test-admin-password-123")
+        response = self.client.post("/api/organizations", json={"name": "Northwind Finance"})
+        self.assertEqual(response.status_code, 201)
+        organization_id = response.get_json()["id"]
+        department = self.client.post(
+            f"/api/organizations/{organization_id}/departments",
+            json={"name": "Risk"},
+        )
+        self.assertEqual(department.status_code, 201)
+        listing = self.client.get(f"/api/organizations/{organization_id}/departments")
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.get_json()[0]["name"], "Risk")
+
+    def test_department_cannot_be_assigned_across_organizations(self):
+        self.login("admin@example.test", "test-admin-password-123")
+        conn = web_dashboard.get_db_connection()
+        first = conn.execute("SELECT id FROM organizations WHERE slug = 'ecoshield-demo'").fetchone()[0]
+        employee = conn.execute("SELECT id FROM employees WHERE name = 'Alice Vance'").fetchone()[0]
+        conn.close()
+        response = self.client.post(
+            f"/api/organizations/{first}/employees/{employee}/department",
+            json={"department_id": 99999},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("does not belong", response.get_json()["error"])
+
+    def test_employee_cannot_manage_organizations(self):
+        self.login("employee@example.test", "test-employee-password-123")
+        response = self.client.get("/api/organizations")
+        self.assertEqual(response.status_code, 403)
+
     def test_admin_api_rejects_anonymous_requests(self):
         response = self.client.get("/api/profiles")
         self.assertEqual(response.status_code, 401)
