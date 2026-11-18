@@ -122,3 +122,17 @@ The current branch contains a Flask dashboard, department-level simulation contr
 The employee login is still configured for one demo employee rather than supporting multiple independently authenticated employees. The prototype does not send real campaign emails or support multiple independently authenticated employee accounts. It now supports aggregate reports and baseline-linked retest comparisons for matching audience/scenario campaigns, but it is not yet a complete multi-tenant team-readiness reporting platform. The simulation library and seeded employee records are synthetic.
 
 The event watcher and analysis endpoint are rule-based. Training indicators are not evidence of compromise. No real account lockout, device isolation, access revocation, or external incident escalation is performed. The Render-hosted demo is not automatically updated by changes on this development branch.
+
+
+## Organisation and department data foundation
+
+The development branch adds an additive SQLite migration for `organizations`
+and `departments`. Existing employee rows retain their primary keys and
+legacy department text while gaining `organization_id` and `department_id`
+relationships. Existing duplicate names are preserved as distinct employees.
+
+This is a schema foundation, not a completed multi-tenant product feature.
+Organisation provisioning, administrator-controlled department management,
+tenant-scoped authorization, and employee account provisioning remain
+separate implementation and validation tasks. The demo organisation name can
+be set with `ECOSHIELD_ORGANIZATION_NAME`.
