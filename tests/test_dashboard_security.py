@@ -12,7 +12,7 @@ os.environ.setdefault("ECOSHIELD_EMPLOYEE_PASSWORD", "test-employee-password-123
 os.environ.setdefault("ECOSHIELD_COOKIE_SECURE", "false")
 
 import web_dashboard
-from organization_model import ensure_organization_schema
+from organization_model import (ensure_organization_schema, create_organization, create_department)
 
 
 class DashboardSecurityTests(unittest.TestCase):
@@ -128,10 +128,12 @@ class DashboardSecurityTests(unittest.TestCase):
         conn = web_dashboard.get_db_connection()
         first = conn.execute("SELECT id FROM organizations WHERE slug = 'ecoshield-demo'").fetchone()[0]
         employee = conn.execute("SELECT id FROM employees WHERE name = 'Alice Vance'").fetchone()[0]
+        second = create_organization(conn, "Separate Tenant")
+        foreign_department = create_department(conn, second, "Finance")
         conn.close()
         response = self.client.post(
             f"/api/organizations/{first}/employees/{employee}/department",
-            json={"department_id": 99999},
+            json={"department_id": foreign_department},
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("does not belong", response.get_json()["error"])
