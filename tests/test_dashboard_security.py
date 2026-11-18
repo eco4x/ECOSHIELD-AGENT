@@ -12,6 +12,7 @@ os.environ.setdefault("ECOSHIELD_EMPLOYEE_PASSWORD", "test-employee-password-123
 os.environ.setdefault("ECOSHIELD_COOKIE_SECURE", "false")
 
 import web_dashboard
+from organization_model import ensure_organization_schema
 
 
 class DashboardSecurityTests(unittest.TestCase):
@@ -73,6 +74,39 @@ class DashboardSecurityTests(unittest.TestCase):
             [(row[0], row[1]) for row in rows],
             [("Alice Vance", 1), ("Marcus Ward", 1), ("Sarah Connor", 1)],
         )
+
+
+    def test_organization_migration_preserves_employee_ids_and_duplicate_names(self):
+        conn = web_dashboard.get_db_connection()
+        conn.execute("INSERT INTO employees (id, name, department) VALUES (101, 'Alex Kim', 'Finance')")
+        conn.execute("INSERT INTO employees (id, name, department) VALUES (102, 'Alex Kim', 'Finance')")
+        conn.commit()
+        ensure_organization_schema(conn)
+        rows = conn.execute(
+            """SELECT e.id, e.organization_id, e.department_id, o.name, d.name
+               FROM employees e JOIN organizations o ON o.id = e.organization_id
+               JOIN departments d ON d.id = e.department_id
+               WHERE e.id IN (101, 102) ORDER BY e.id"""
+        ).fetchall()
+        self.assertEqual([row["id"] for row in rows], [101, 102])
+        self.assertEqual(rows[0]["organization_id"], rows[1]["organization_id"])
+        self.assertEqual(rows[0]["department_id"], rows[1]["department_id"])
+        self.assertEqual(rows[0][3], "ECOSHIELD Demo Organization")
+        self.assertEqual(rows[0][4], "Finance")
+        self.assertEqual(conn.execute(
+            "SELECT COUNT(*) FROM employees WHERE name = 'Alex Kim' AND department = 'Finance'"
+        ).fetchone()[0], 2)
+        conn.close()
+
+    def test_organization_migration_is_repeatable(self):
+        conn = web_dashboard.get_db_connection()
+        ensure_organization_schema(conn)
+        ensure_organization_schema(conn)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM organizations").fetchone()[0], 1)
+        self.assertEqual(conn.execute(
+            "SELECT COUNT(*) FROM departments WHERE name = 'Finance'"
+        ).fetchone()[0], 1)
+        conn.close()
 
     def test_admin_api_rejects_anonymous_requests(self):
         response = self.client.get("/api/profiles")
