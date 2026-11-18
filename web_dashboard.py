@@ -6,7 +6,7 @@ from functools import wraps
 import hmac
 import sqlite3
 import os
-from organization_model import ensure_organization_schema
+from organization_model import (\n    ensure_organization_schema, create_organization, create_department,\n    list_organizations, list_departments, assign_employee_department,\n)
 from io import StringIO
 from datetime import datetime, timedelta
 from assessment_engine import (
@@ -250,6 +250,64 @@ def dashboard():
         scenario_options=scenario_options(),
         employee_targets=employee_targets
     )
+
+
+@app.route('/api/organizations', methods=['GET', 'POST'])
+@admin_required
+def organizations_api():
+    initialize_database()
+    conn = get_db_connection()
+    try:
+        if request.method == 'POST':
+            payload = request.get_json(silent=True) or request.form
+            organization_id = create_organization(conn, payload.get('name', ''))
+            return jsonify({'id': organization_id}), 201
+        return jsonify(list_organizations(conn))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@app.route('/api/organizations/<int:organization_id>/departments', methods=['GET', 'POST'])
+@admin_required
+def organization_departments_api(organization_id):
+    initialize_database()
+    conn = get_db_connection()
+    try:
+        if request.method == 'POST':
+            payload = request.get_json(silent=True) or request.form
+            department_id = create_department(conn, organization_id, payload.get('name', ''))
+            return jsonify({'id': department_id, 'organization_id': organization_id}), 201
+        organization = conn.execute(
+            "SELECT id FROM organizations WHERE id = ?", (organization_id,)
+        ).fetchone()
+        if organization is None:
+            return jsonify({'error': 'Organisation not found.'}), 404
+        return jsonify(list_departments(conn, organization_id))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@app.route('/api/organizations/<int:organization_id>/employees/<int:employee_id>/department', methods=['POST'])
+@admin_required
+def organization_employee_department_api(organization_id, employee_id):
+    initialize_database()
+    payload = request.get_json(silent=True) or request.form
+    try:
+        department_id = int(payload.get('department_id', ''))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'A valid department_id is required.'}), 400
+    conn = get_db_connection()
+    try:
+        assign_employee_department(conn, employee_id, organization_id, department_id)
+        return jsonify({'updated': True, 'employee_id': employee_id, 'department_id': department_id})
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    finally:
+        conn.close()
 
 
 @app.route('/campaigns/create', methods=['POST'])
