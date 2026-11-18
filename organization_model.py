@@ -69,3 +69,95 @@ def ensure_organization_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_departments_organization ON departments (organization_id)"
     )
     conn.commit()
+
+
+def _slugify(value):
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", (value or "").strip().lower()).strip("-")
+    if not slug:
+        raise ValueError("Organisation name must contain letters or numbers.")
+    return slug[:60]
+
+
+def create_organization(conn, name):
+    name = (name or "").strip()
+    if not name or len(name) > 100:
+        raise ValueError("Organisation name must contain 1 to 100 characters.")
+    base = _slugify(name)
+    slug = base
+    suffix = 2
+    while conn.execute("SELECT 1 FROM organizations WHERE slug = ?", (slug,)).fetchone():
+        slug = f"{base[:55]}-{suffix}"
+        suffix += 1
+    cursor = conn.execute(
+        "INSERT INTO organizations (name, slug) VALUES (?, ?)", (name, slug)
+    )
+    conn.commit()
+    return cursor.lastrowid
+
+
+def create_department(conn, organization_id, name):
+    name = (name or "").strip()
+    if not name or len(name) > 80:
+        raise ValueError("Department name must contain 1 to 80 characters.")
+    organization = conn.execute(
+        "SELECT id FROM organizations WHERE id = ? AND status = 'active'",
+        (organization_id,),
+    ).fetchone()
+    if organization is None:
+        raise ValueError("Active organisation not found.")
+    try:
+        cursor = conn.execute(
+            "INSERT INTO departments (organization_id, name) VALUES (?, ?)",
+            (organization_id, name),
+        )
+    except Exception as exc:
+        if "UNIQUE" in str(exc).upper():
+            raise ValueError("That department already exists in this organisation.") from exc
+        raise
+    conn.commit()
+    return cursor.lastrowid
+
+
+def list_organizations(conn):
+    rows = conn.execute(
+        """SELECT o.id, o.name, o.slug, o.status, COUNT(DISTINCT d.id) AS department_count,
+                  COUNT(DISTINCT e.id) AS employee_count
+           FROM organizations o
+           LEFT JOIN departments d ON d.organization_id = o.id
+           LEFT JOIN employees e ON e.organization_id = o.id
+           GROUP BY o.id ORDER BY o.name"""
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def list_departments(conn, organization_id):
+    rows = conn.execute(
+        """SELECT d.id, d.organization_id, d.name, d.status,
+                  COUNT(e.id) AS employee_count
+           FROM departments d
+           LEFT JOIN employees e ON e.department_id = d.id
+           WHERE d.organization_id = ?
+           GROUP BY d.id ORDER BY d.name""",
+        (organization_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def assign_employee_department(conn, employee_id, organization_id, department_id):
+    department = conn.execute(
+        """SELECT id, name FROM departments
+           WHERE id = ? AND organization_id = ? AND status = 'active'""",
+        (department_id, organization_id),
+    ).fetchone()
+    if department is None:
+        raise ValueError("Department does not belong to the selected organisation.")
+    cursor = conn.execute(
+        """UPDATE employees
+           SET organization_id = ?, department_id = ?, department = ?
+           WHERE id = ? AND organization_id = ?""",
+        (organization_id, department_id, department["name"], employee_id, organization_id),
+    )
+    if cursor.rowcount != 1:
+        raise ValueError("Employee does not belong to the selected organisation.")
+    conn.commit()
