@@ -6,6 +6,7 @@ from functools import wraps
 import hmac
 import sqlite3
 import os
+from organization_model import ensure_organization_schema
 from io import StringIO
 from datetime import datetime, timedelta
 from assessment_engine import (
@@ -893,6 +894,7 @@ def initialize_database():
             isolation_details TEXT
         )''')
     initialize_assessment_schema(conn)
+    ensure_organization_schema(conn)
     conn.commit()
     conn.close()
 
@@ -914,6 +916,7 @@ def ensure_seed_data():
                     'INSERT INTO employees (name, department) VALUES (?, ?)',
                     (name, department),
                 )
+        ensure_organization_schema(conn)
         conn.commit()
     finally:
         conn.close()
