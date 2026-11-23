@@ -81,6 +81,16 @@ class DashboardSecurityTests(unittest.TestCase):
         self.assertIn("not evidence of compromise", payload["summary"])
         self.assertTrue(any("retest" in item.lower() for item in payload["suggestions"]))
 
+    def test_audit_trail_is_admin_only(self):
+        denied = self.client.get("/audit")
+        self.assertEqual(denied.status_code, 401)
+
+    def test_admin_can_view_audit_trail_and_login_is_recorded(self):
+        self.login("admin@example.test", "test-admin-password-123")
+        response = self.client.get("/audit")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"auth.login", response.data)
+
     def test_security_headers_are_present(self):
         response = self.client.get("/login")
         self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
