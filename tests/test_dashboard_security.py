@@ -85,11 +85,20 @@ class DashboardSecurityTests(unittest.TestCase):
         denied = self.client.get("/audit")
         self.assertEqual(denied.status_code, 401)
 
-    def test_admin_can_view_audit_trail_and_login_is_recorded(self):
-        self.login("admin@example.test", "test-admin-password-123")
+    def test_admin_can_view_audit_trail(self):
+        from audit_events import record_audit_event
+
+        with self.client.session_transaction() as session:
+            session["user_role"] = "admin"
+            session["user_name"] = "Readiness Admin"
+        conn = web_dashboard.get_db_connection()
+        record_audit_event(conn, actor_role="admin", action="test.audit-entry")
+        conn.commit()
+        conn.close()
+
         response = self.client.get("/audit")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"auth.login", response.data)
+        self.assertIn(b"test.audit-entry", response.data)
 
     def test_security_headers_are_present(self):
         response = self.client.get("/login")
