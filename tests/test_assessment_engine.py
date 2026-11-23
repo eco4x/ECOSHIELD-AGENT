@@ -62,6 +62,27 @@ class AssessmentWorkflowTests(unittest.TestCase):
         self.assertEqual(signal, "needs_guidance")
         self.assertEqual(score, 35)
 
+    def test_duplicate_submission_does_not_change_risk_twice(self):
+        _, due_at = self.make_due_campaign()
+        activate_due_campaigns(self.conn, due_at)
+        assignment_id = self.conn.execute(
+            "SELECT id FROM assessment_assignments"
+        ).fetchone()[0]
+
+        record_interaction(self.conn, assignment_id, 1, "clicked")
+        with self.assertRaises(ValueError):
+            record_interaction(self.conn, assignment_id, 1, "clicked")
+
+        score = self.conn.execute(
+            "SELECT risk_score FROM employees WHERE id = 1"
+        ).fetchone()[0]
+        learning_rows = self.conn.execute(
+            "SELECT COUNT(*) FROM learning_progress WHERE assignment_id = ?",
+            (assignment_id,),
+        ).fetchone()[0]
+        self.assertEqual(score, 35)
+        self.assertEqual(learning_rows, 1)
+
     def test_reporting_reduces_risk_indicator_without_below_zero(self):
         _, due_at = self.make_due_campaign()
         activate_due_campaigns(self.conn, due_at)
