@@ -338,6 +338,36 @@ def campaign_report_view(campaign_id):
     """, report=report)
 
 
+@app.route('/audit')
+@admin_required
+def audit_view():
+    conn = get_db_connection()
+    events = list_audit_events(conn, limit=100)
+    conn.close()
+    return render_template_string("""
+    <!doctype html><html lang="en"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Audit trail · ECOSHIELD</title>
+    <style>
+      body{margin:0;padding:24px;background:#041017;color:#e9f7ff;font-family:Inter,system-ui,sans-serif}
+      main{max-width:1100px;margin:0 auto}.card{background:#0f1f30;border:1px solid #26394b;border-radius:18px;padding:22px;margin:16px 0}
+      a{color:#39d5e0}p,small{color:#a7cfe5}table{width:100%;border-collapse:collapse}
+      th,td{text-align:left;padding:12px;border-bottom:1px solid #26394b;vertical-align:top}
+      code{white-space:pre-wrap;overflow-wrap:anywhere;color:#a7cfe5}
+    </style></head><body><main>
+      <p><a href="{{ url_for('dashboard') }}">← Back to dashboard</a></p>
+      <section class="card"><h1>Structured audit trail</h1>
+      <p>Recent application actions. Secrets and raw form contents are not recorded.</p>
+      <table><thead><tr><th>Time (UTC)</th><th>Actor</th><th>Action</th><th>Target</th><th>Outcome</th><th>Metadata</th></tr></thead><tbody>
+      {% for event in events %}
+      <tr><td>{{ event.occurred_at }}</td><td>{{ event.actor_role }}{% if event.actor_ref %} · {{ event.actor_ref }}{% endif %}</td>
+      <td>{{ event.action }}</td><td>{{ event.target_type or '—' }}{% if event.target_ref %} · {{ event.target_ref }}{% endif %}</td>
+      <td>{{ event.outcome }}</td><td><code>{{ event.metadata_json }}</code></td></tr>
+      {% else %}<tr><td colspan="6">No audit events recorded yet.</td></tr>{% endfor %}
+      </tbody></table></section></main></body></html>
+    """, events=events)
+
+
 @app.route('/assessments/<int:assignment_id>/respond', methods=['POST'])
 @login_required
 def assessment_respond(assignment_id):
@@ -433,6 +463,7 @@ ADMIN_PAGE = """
         <p style="color:#7ca8c9;margin:8px 0 0;">Logged in as {{ user_name }} · {{ department }}</p>
       </div>
       <div class="button-row">
+        <a class="logout" href="/audit">Audit trail</a>
         <form method="POST" action="/logout" style="display:inline;margin:0;">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="logout" type="submit">Logout</button></form>
       </div>
