@@ -39,6 +39,34 @@ The repository currently contains:
 - The current event watcher and analysis endpoint are rule-based, not AI detection engines.
 - The current prototype does not perform verified network isolation or real identity-provider account lockout.
 
+## Terminal interface
+
+The graphical dashboard and terminal interface use the same SQLite database and campaign engine. The CLI is an alternative operating mode, not a separate data store.
+
+Examples:
+
+```bash
+# Show the current readiness overview
+python ecoshield_cli.py status
+
+# List campaigns
+python ecoshield_cli.py campaigns
+
+# Create a campaign (local Kampala time by default)
+python ecoshield_cli.py campaign-create \
+  --name "November readiness check" \
+  --department "Finance" \
+  --scenario phishing_link \
+  --at "2026-11-28T10:00:00"
+
+# Review recent audit events
+python ecoshield_cli.py audit
+```
+
+Set `ECOSHIELD_DB_PATH` to point the CLI at the same persistent database used by the web service. Alternatively, pass `--db /path/to/ecoshield.db` before the subcommand. Protect the host and database file: local CLI access is privileged access.
+
+Administrators can also open `/audit` from the graphical dashboard to review recent application actions. The audit trail records selected action metadata only; do not add passwords, tokens, authentication codes, or raw request bodies.
+
 ## Dashboard security configuration
 
 The dashboard fails closed unless these server-side environment variables are configured:
