@@ -326,14 +326,16 @@ def record_interaction(conn, assignment_id, employee_id, interaction):
     now_text = _utc_now().isoformat(timespec="seconds")
     lesson_key = SCENARIOS[row["scenario_key"]]["lesson_key"]
 
-    conn.execute(
+    cursor = conn.execute(
         """
         UPDATE assessment_assignments
         SET status = 'completed', interaction = ?, signal = ?, completed_at = ?
-        WHERE id = ?
+        WHERE id = ? AND employee_id = ? AND status = 'assigned'
         """,
-        (interaction, signal, now_text, assignment_id),
+        (interaction, signal, now_text, assignment_id, employee_id),
     )
+    if cursor.rowcount != 1:
+        raise ValueError("This assessment has already been completed.")
 
     # Keep the legacy employee risk indicator aligned with assessment outcomes.
     # These are bounded training signals, not evidence of account compromise.
