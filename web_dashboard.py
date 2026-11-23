@@ -8,6 +8,7 @@ import sqlite3
 import os
 from io import StringIO
 from datetime import datetime, timedelta
+from audit_events import initialize_audit_schema, record_audit_event, list_audit_events
 from assessment_engine import (
     initialize_assessment_schema, create_campaign, activate_due_campaigns,
     list_campaigns, list_employee_assignments, record_interaction,
@@ -162,6 +163,15 @@ def login():
                         return render_template_string(LOGIN_PAGE, error=error), 403
                     session['employee_id'] = employee_row['id']
                 session['department'] = user['department']
+                initialize_database()
+                audit_conn = get_db_connection()
+                record_audit_event(
+                    audit_conn, actor_role=role, actor_ref=session.get('employee_id'),
+                    action='auth.login', target_type='session', outcome='success',
+                    metadata={'role': role},
+                )
+                audit_conn.commit()
+                audit_conn.close()
                 return redirect(url_for('dashboard'))
         error = 'Invalid email or password.'
     return render_template_string(LOGIN_PAGE, error=error)
@@ -169,6 +179,14 @@ def login():
 
 @app.route('/logout', methods=['POST'])
 def logout():
+    if session.get('user_role'):
+        audit_conn = get_db_connection()
+        record_audit_event(
+            audit_conn, actor_role=session.get('user_role'), actor_ref=session.get('employee_id'),
+            action='auth.logout', target_type='session', outcome='success',
+        )
+        audit_conn.commit()
+        audit_conn.close()
     session.clear()
     return redirect(url_for('login'))
 
@@ -236,7 +254,7 @@ def campaign_create():
     ensure_seed_data()
     conn = get_db_connection()
     try:
-        create_campaign(
+        campaign_id = create_campaign(
             conn,
             request.form.get('name', ''),
             request.form.get('department', ''),
@@ -246,6 +264,15 @@ def campaign_create():
             os.environ.get('ECOSHIELD_TIMEZONE', 'Africa/Kampala'),
             request.form.get('retest_of_campaign_id') or None,
         )
+        record_audit_event(
+            conn, actor_role='admin', action='campaign.created',
+            target_type='campaign', target_ref=campaign_id,
+            metadata={
+                'department': request.form.get('department', ''),
+                'scenario_key': request.form.get('scenario_key', ''),
+            },
+        )
+        conn.commit()
     except ValueError as exc:
         conn.close()
         return str(exc), 400
@@ -318,7 +345,14 @@ def assessment_respond(assignment_id):
         return 'Employee access required', 403
     conn = get_db_connection()
     try:
-        record_interaction(conn, assignment_id, session.get('employee_id'), request.form.get('interaction', ''))
+        interaction = request.form.get('interaction', '')
+        record_interaction(conn, assignment_id, session.get('employee_id'), interaction)
+        record_audit_event(
+            conn, actor_role='employee', actor_ref=session.get('employee_id'),
+            action='assessment.responded', target_type='assignment',
+            target_ref=assignment_id, metadata={'interaction': interaction},
+        )
+        conn.commit()
     except (ValueError, LookupError) as exc:
         conn.close()
         return str(exc), 400
@@ -334,6 +368,12 @@ def learning_complete(assignment_id):
     conn = get_db_connection()
     try:
         complete_learning(conn, assignment_id, session.get('employee_id'))
+        record_audit_event(
+            conn, actor_role='employee', actor_ref=session.get('employee_id'),
+            action='learning.completed', target_type='assignment',
+            target_ref=assignment_id,
+        )
+        conn.commit()
     except LookupError as exc:
         conn.close()
         return str(exc), 404
@@ -869,6 +909,7 @@ def initialize_database():
             isolation_details TEXT
         )''')
     initialize_assessment_schema(conn)
+    initialize_audit_schema(conn)
     conn.commit()
     conn.close()
 
